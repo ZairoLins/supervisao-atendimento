@@ -1,0 +1,11 @@
+# /etc/systemd/system/supervisao-backup.timer
+[Unit]
+Description=Agenda o backup diário da Supervisão de Atendimento
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

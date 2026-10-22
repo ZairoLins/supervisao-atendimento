@@ -1,0 +1,585 @@
+// Sistema de Gestão de Supervisão de Atendimento
+// Convenções:
+// - Datas sem horário (@db.Date) são tratadas como datas de calendário em UTC 00:00.
+// - Horários de jornada/ocorrência/reunião são guardados em minutos desde 00:00 da data
+//   de referência. Um fim maior que 1440 indica que o período termina no dia seguinte
+//   (ex.: plantão noturno 19:00–07:00 => início 1140, fim 1860). Isso elimina
+//   ambiguidades de fuso horário e torna os cálculos determinísticos.
+// - Colunas "searchText" contêm texto normalizado (minúsculas, sem acentos) mantido
+//   pela camada de serviço e indexado com pg_trgm para a pesquisa global.
+//   Nunca incluem conteúdo sensível (dados médicos, anexos, senhas).
+// - Regras não expressáveis no schema estão documentadas em docs/BANCO.md.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Acesso ─────────────────────────────
+
+enum Role {
+  SUPERVISOR
+  ASSISTANT
+}
+
+model User {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  username     String    @unique
+  name         String
+  passwordHash String
+  role         Role      @default(SUPERVISOR)
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  assignedTasks Task[]       @relation("TaskAssigneeUser")
+  taskEvents    TaskEvent[]
+  attachments   Attachment[]
+}
+
+model Session {
+  // id = SHA-256 (hex) do token entregue no cookie; o token em si nunca é salvo.
+  id         String   @id
+  userId     String   @db.Uuid
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model LoginAttempt {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  username  String
+  // HMAC do IP (não guardamos o IP em claro)
+  ipHash    String
+  success   Boolean
+  createdAt DateTime @default(now())
+
+  @@index([username, createdAt])
+  @@index([ipHash, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  // Diferenças antes/depois já sem campos sensíveis
+  changes    Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+// ─────────────────────────── Colaboradores ───────────────────────────
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  INACTIVE
+}
+
+model Employee {
+  id                 String         @id @default(uuid(7)) @db.Uuid
+  // Identificador interno legível (COL-0001)
+  code               Int            @unique @default(autoincrement())
+  fullName           String
+  jobTitle           String
+  team               String
+  startDate          DateTime       @db.Date
+  status             EmployeeStatus @default(ACTIVE)
+  workloadLabel      String?
+  generalNotes       String?
+  inactivatedAt      DateTime?
+  inactivationReason String?
+  searchText         String         @default("")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  scheduleAssignments  EmployeeScheduleAssignment[]
+  shiftAdjustments     ShiftAdjustment[]             @relation("AdjustmentEmployee")
+  swapCounterparts     ShiftAdjustment[]             @relation("AdjustmentSwapWith")
+  occurrences          AttendanceOccurrence[]
+  metrics              MonthlyMetric[]
+  feedbacks            Feedback[]
+  notes                EmployeeNote[]
+  relatedTasks         Task[]                        @relation("TaskRelatedEmployee")
+  assignedTasks        Task[]                        @relation("TaskAssigneeEmployee")
+  meetingParticipation MeetingParticipant[]
+
+  @@index([status])
+  @@index([team])
+  @@index([jobTitle])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// ─────────────────────────── Jornadas e escalas ───────────────────────────
+
+enum ScheduleKind {
+  // Jornada semanal fixa (dias da semana configuráveis)
+  WEEKLY
+  // Revezamento em ciclo de N dias (12x36 = ciclo de 2 dias, trabalha no dia 0)
+  ROTATION
+}
+
+model WorkSchedule {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  name        String       @unique
+  kind        ScheduleKind
+  description String?
+  // WEEKLY: dias da semana trabalhados (0 = domingo ... 6 = sábado)
+  weekdays    Int[]
+  // ROTATION: tamanho do ciclo e posições de trabalho no ciclo
+  cycleDays   Int?
+  workOffsets Int[]
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  segments    WorkScheduleSegment[]
+  assignments EmployeeScheduleAssignment[]
+}
+
+// Trechos computáveis da jornada. Intervalos entre trechos não são computados.
+model WorkScheduleSegment {
+  id          String @id @default(uuid(7)) @db.Uuid
+  scheduleId  String @db.Uuid
+  position    Int
+  startMinute Int
+  endMinute   Int
+
+  schedule WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, position])
+}
+
+// Histórico de vigência: cada colaborador possui no máximo uma atribuição vigente por
+// data (sem sobreposição — validado no serviço). validTo nulo = vigente sem fim.
+model EmployeeScheduleAssignment {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  employeeId         String    @db.Uuid
+  scheduleId         String    @db.Uuid
+  validFrom          DateTime  @db.Date
+  validTo            DateTime? @db.Date
+  // Obrigatória para ROTATION: uma data em que o colaborador trabalha (dia 0 do ciclo)
+  cycleReferenceDate DateTime? @db.Date
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  employee Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  schedule WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, validFrom])
+}
+
+enum AdjustmentKind {
+  // Dia previsto de trabalho passa a ser folga
+  DAY_OFF
+  // Dia (de folga ou não) passa a ter horário de trabalho específico
+  CUSTOM_HOURS
+}
+
+// O calendário previsto (ShiftCalendar) é derivado deterministicamente da atribuição
+// vigente + regra da jornada. Trocas e ajustes ficam aqui, sobrepostos ao previsto,
+// sem apagar o que estava planejado. Ajustes revogados permanecem para auditoria.
+model ShiftAdjustment {
+  id                 String         @id @default(uuid(7)) @db.Uuid
+  employeeId         String         @db.Uuid
+  date               DateTime       @db.Date
+  kind               AdjustmentKind
+  startMinute        Int?
+  endMinute          Int?
+  swapWithEmployeeId String?        @db.Uuid
+  reason             String
+  revokedAt          DateTime?
+  revokedReason      String?
+  createdAt          DateTime       @default(now())
+
+  employee     Employee               @relation("AdjustmentEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  swapWith     Employee?              @relation("AdjustmentSwapWith", fields: [swapWithEmployeeId], references: [id], onDelete: SetNull)
+  occurrences  AttendanceOccurrence[]
+
+  @@index([employeeId, date])
+}
+
+// ─────────────────────────── Frequência ───────────────────────────
+
+model OccurrenceType {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  code              String   @unique
+  name              String   @unique
+  // Desconta das horas previstas no acompanhamento gerencial
+  countsAsAbsence   Boolean  @default(true)
+  // Exige horário inicial e final (ausências parciais, atrasos, saídas)
+  requiresTimeRange Boolean  @default(false)
+  // Tipos médicos: conteúdo restrito, nunca indexado nem exportado por padrão
+  isMedical         Boolean  @default(false)
+  // Tipos de sistema não podem ser removidos
+  isSystem          Boolean  @default(false)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  occurrences AttendanceOccurrence[]
+}
+
+enum ReviewStatus {
+  PENDING
+  CONFIRMED
+  DISREGARDED
+}
+
+model AttendanceOccurrence {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  code           Int          @unique @default(autoincrement())
+  employeeId     String       @db.Uuid
+  typeId         String       @db.Uuid
+  // Data do turno ao qual a ocorrência se refere (início do plantão)
+  date           DateTime     @db.Date
+  // Nulos = dia/turno inteiro
+  startMinute    Int?
+  endMinute      Int?
+  adminNotes     String?
+  // Restrito: nunca indexado, nunca exportado, nunca registrado em auditoria em claro
+  restrictedNotes String?
+  reviewStatus   ReviewStatus @default(PENDING)
+  adjustmentId   String?      @db.Uuid
+  searchText     String       @default("")
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  employee    Employee         @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  type        OccurrenceType   @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  adjustment  ShiftAdjustment? @relation(fields: [adjustmentId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
+
+  @@index([employeeId, date])
+  @@index([date])
+  @@index([reviewStatus])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// Arquivos ficam em diretório privado (ATTACHMENTS_DIR), servidos apenas por rota autenticada.
+model Attachment {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  occurrenceId String    @db.Uuid
+  originalName String
+  storedName   String    @unique
+  mimeType     String
+  sizeBytes    Int
+  sha256       String
+  uploadedById String?   @db.Uuid
+  deletedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  occurrence AttendanceOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Restrict)
+  uploadedBy User?                @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([occurrenceId])
+}
+
+// ─────────────────────────── Desempenho ───────────────────────────
+
+model MonthlyMetric {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  employeeId       String   @db.Uuid
+  // Primeiro dia do mês de referência
+  month            DateTime @db.Date
+  ticketsHandled   Int
+  avgHandleMinutes Decimal  @db.Decimal(8, 2)
+  avgRating        Decimal  @db.Decimal(4, 2)
+  notes            String?
+  // Contexto para comparações equivalentes (função/equipe na época do lançamento)
+  jobTitleSnapshot String
+  teamSnapshot     String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee  Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  revisions MonthlyMetricRevision[]
+
+  @@unique([employeeId, month])
+  @@index([month])
+}
+
+// Cada correção guarda os valores anteriores, preservando o original.
+model MonthlyMetricRevision {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  metricId         String   @db.Uuid
+  ticketsHandled   Int
+  avgHandleMinutes Decimal  @db.Decimal(8, 2)
+  avgRating        Decimal  @db.Decimal(4, 2)
+  notes            String?
+  reason           String
+  changedById      String?  @db.Uuid
+  createdAt        DateTime @default(now())
+
+  metric MonthlyMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+
+  @@index([metricId, createdAt])
+}
+
+// ─────────────────────────── Reuniões ───────────────────────────
+
+enum MeetingType {
+  WEEKLY
+  EXTRAORDINARY
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  DONE
+  CANCELED
+}
+
+model MeetingTemplate {
+  id              String      @id @default(uuid(7)) @db.Uuid
+  name            String      @unique
+  type            MeetingType
+  durationMinutes Int         @default(60)
+  agendaItems     String[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  series MeetingSeries[]
+}
+
+// Reuniões semanais recorrentes: a série gera instâncias (Meeting) independentes.
+model MeetingSeries {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  title       String
+  weekday     Int
+  startMinute Int
+  endMinute   Int
+  startDate   DateTime  @db.Date
+  endDate     DateTime? @db.Date
+  templateId  String?   @db.Uuid
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  template MeetingTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  meetings Meeting[]
+}
+
+model Meeting {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  code        Int           @unique @default(autoincrement())
+  title       String
+  type        MeetingType
+  status      MeetingStatus @default(SCHEDULED)
+  date        DateTime      @db.Date
+  startMinute Int
+  endMinute   Int?
+  location    String?
+  // Anotações realizadas durante a reunião (ata)
+  minutes     String?
+  seriesId    String?       @db.Uuid
+  searchText  String        @default("")
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  series       MeetingSeries?       @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  agendaItems  MeetingAgendaItem[]
+  decisions    MeetingDecision[]
+  participants MeetingParticipant[]
+  tasks        Task[]
+
+  @@unique([seriesId, date])
+  @@index([date])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// Pauta planejada
+model MeetingAgendaItem {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  meetingId   String  @db.Uuid
+  position    Int
+  title       String
+  description String?
+  discussed   Boolean @default(false)
+  searchText  String  @default("")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId, position])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// Decisões e encaminhamentos definidos (ações viram Task vinculada)
+model MeetingDecision {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  meetingId   String   @db.Uuid
+  position    Int
+  description String
+  createdAt   DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId, position])
+}
+
+model MeetingParticipant {
+  meetingId  String   @db.Uuid
+  employeeId String   @db.Uuid
+  attended   Boolean?
+
+  meeting  Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@id([meetingId, employeeId])
+  @@index([employeeId])
+}
+
+// ─────────────────────────── Feedbacks e anotações ───────────────────────────
+
+enum FeedbackType {
+  RECOGNITION
+  DEVELOPMENT
+  CORRECTIVE
+  ALIGNMENT
+  ONE_ON_ONE
+}
+
+enum FeedbackStatus {
+  OPEN
+  FOLLOW_UP
+  CLOSED
+}
+
+model Feedback {
+  id             String         @id @default(uuid(7)) @db.Uuid
+  code           Int            @unique @default(autoincrement())
+  employeeId     String         @db.Uuid
+  date           DateTime       @db.Date
+  type           FeedbackType
+  context        String
+  positives      String?
+  improvements   String?
+  agreedActions  String?
+  followUpDate   DateTime?      @db.Date
+  status         FeedbackStatus @default(OPEN)
+  reviewDate     DateTime?      @db.Date
+  searchText     String         @default("")
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  tasks    Task[]
+
+  @@index([employeeId, date])
+  @@index([status])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+enum NoteCategory {
+  OBSERVATION
+  RECOGNITION
+  ALIGNMENT
+  DEVELOPMENT
+  OTHER
+}
+
+model EmployeeNote {
+  id         String       @id @default(uuid(7)) @db.Uuid
+  employeeId String       @db.Uuid
+  date       DateTime     @db.Date
+  category   NoteCategory
+  title      String
+  content    String
+  searchText String       @default("")
+  deletedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, date])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// ─────────────────────────── Tarefas ───────────────────────────
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  CANCELED
+}
+
+model Task {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  code               Int          @unique @default(autoincrement())
+  title              String
+  description        String?
+  priority           TaskPriority @default(MEDIUM)
+  status             TaskStatus   @default(PENDING)
+  dueDate            DateTime?    @db.Date
+  completedAt        DateTime?
+  assigneeUserId     String?      @db.Uuid
+  assigneeEmployeeId String?      @db.Uuid
+  employeeId         String?      @db.Uuid
+  meetingId          String?      @db.Uuid
+  feedbackId         String?      @db.Uuid
+  searchText         String       @default("")
+  deletedAt          DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  assigneeUser     User?       @relation("TaskAssigneeUser", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  assigneeEmployee Employee?   @relation("TaskAssigneeEmployee", fields: [assigneeEmployeeId], references: [id], onDelete: SetNull)
+  employee         Employee?   @relation("TaskRelatedEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+  meeting          Meeting?    @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  feedback         Feedback?   @relation(fields: [feedbackId], references: [id], onDelete: SetNull)
+  events           TaskEvent[]
+
+  @@index([status, dueDate])
+  @@index([employeeId])
+  @@index([meetingId])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+model TaskEvent {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  taskId    String   @db.Uuid
+  userId    String?  @db.Uuid
+  field     String
+  fromValue String?
+  toValue   String?
+  createdAt DateTime @default(now())
+
+  task Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+}

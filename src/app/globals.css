@@ -1,0 +1,193 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+/*
+ * Design system — adaptação administrativa da referência "ORYZO AI — Style Reference".
+ * Canvas Walnut Shadow, tipografia Warm Cream, superfície Bark Brown, divisórias tracejadas
+ * em Cork Border e o laranja Ember reservado a pequenos acentos editoriais.
+ */
+@theme {
+  --color-walnut: #100904;
+  --color-cream: #ffedd7;
+  --color-bark: #382416;
+  --color-cork: #40372e;
+  --color-driftwood: #6c5f51;
+  --color-ember: #dc5000;
+
+  /* Derivados para leitura (contraste AA sobre o Walnut) */
+  --color-muted: #c9b8a3;
+  --color-subtle: #a3927e;
+  --color-surface: #1a110a;
+  --color-surface-2: #23170e;
+
+  /* Estados — sempre acompanhados de texto/ícone */
+  --color-ok: #b7cf98;
+  --color-warn: #f0c070;
+  --color-danger: #ff9c7a;
+  --color-info: #a9c7d8;
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --radius-card: 12px;
+  --radius-pill: 36px;
+  --radius-outline: 22.5px;
+
+  --spacing-gap: 18px;
+  --spacing-panel: 24px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-walnut);
+  color: var(--color-cream);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01" on, "cv11" on;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--color-bark);
+  color: var(--color-cream);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-cream);
+  outline-offset: 2px;
+}
+
+@layer components {
+  /* Tipografia editorial: títulos, navegação e rótulos em caixa alta, peso 500 */
+  .display {
+    @apply text-3xl font-medium uppercase leading-[0.95] md:text-[41px];
+  }
+  .heading {
+    @apply text-lg font-medium uppercase leading-none md:text-2xl md:leading-[1.09];
+  }
+  .subheading {
+    @apply text-sm font-medium uppercase leading-none tracking-normal;
+  }
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase leading-tight text-subtle;
+  }
+  .label {
+    @apply mb-1.5 block text-[11px] font-medium uppercase text-muted;
+  }
+  .accent {
+    @apply text-ember;
+  }
+
+  /* Superfícies */
+  .panel {
+    @apply rounded-[var(--radius-card)] border border-cork bg-surface p-[var(--spacing-panel)];
+  }
+  .panel-tight {
+    @apply rounded-[var(--radius-card)] border border-cork bg-surface p-4;
+  }
+  .divider {
+    @apply border-0 border-t border-dashed border-cork;
+  }
+
+  /* Botões */
+  .btn {
+    @apply inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap px-5 py-2 text-xs font-medium uppercase transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply rounded-[var(--radius-pill)] border border-bark bg-bark text-cream hover:border-driftwood hover:bg-[#45301f];
+  }
+  .btn-secondary {
+    @apply rounded-[var(--radius-outline)] border border-cream/70 bg-transparent text-cream hover:border-cream hover:bg-cream/5;
+  }
+  .btn-ghost {
+    @apply rounded-[var(--radius-outline)] border border-transparent px-3 text-muted hover:text-cream hover:bg-cream/5;
+  }
+  .btn-danger {
+    @apply rounded-[var(--radius-outline)] border border-danger/60 text-danger hover:bg-danger/10;
+  }
+  .btn-sm {
+    @apply min-h-7 px-3 py-1 text-[11px];
+  }
+  .link {
+    @apply font-medium text-cream underline decoration-cork decoration-1 underline-offset-4 hover:decoration-cream;
+  }
+  .link-accent {
+    @apply font-medium text-ember underline decoration-ember/40 underline-offset-4 hover:decoration-ember;
+  }
+
+  /* Campos minimalistas: linha inferior, sem caixa */
+  .input {
+    @apply block w-full rounded-none border-0 border-b border-driftwood bg-transparent px-0.5 py-2 text-sm text-cream placeholder:text-subtle/80 focus:border-cream focus:outline-none aria-invalid:border-danger disabled:opacity-60;
+  }
+  select.input {
+    @apply cursor-pointer pr-6;
+  }
+  select.input option {
+    background: var(--color-surface-2);
+    color: var(--color-cream);
+  }
+  textarea.input {
+    @apply min-h-24 resize-y rounded-[6px] border border-driftwood px-3 focus:border-cream;
+  }
+  .checkbox {
+    @apply size-4 cursor-pointer accent-[#6c5f51];
+  }
+
+  /* Etiquetas de status */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase leading-4 whitespace-nowrap;
+  }
+  .badge-neutral {
+    @apply border-cork text-muted;
+  }
+  .badge-ok {
+    @apply border-ok/40 text-ok;
+  }
+  .badge-warn {
+    @apply border-warn/40 text-warn;
+  }
+  .badge-danger {
+    @apply border-danger/50 text-danger;
+  }
+  .badge-info {
+    @apply border-info/40 text-info;
+  }
+  .badge-accent {
+    @apply border-ember/50 text-ember;
+  }
+
+  /* Tabelas legíveis */
+  .table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  .table thead th {
+    @apply border-b border-cork px-3 py-2.5 text-[11px] font-medium uppercase text-subtle whitespace-nowrap;
+  }
+  .table tbody td {
+    @apply border-b border-dashed border-cork/80 px-3 py-3 align-top;
+  }
+  .table tbody tr:hover td {
+    @apply bg-cream/[0.025];
+  }
+  .table-wrap {
+    @apply -mx-[var(--spacing-panel)] overflow-x-auto px-[var(--spacing-panel)];
+  }
+
+  .kbd {
+    @apply rounded border border-cork px-1.5 py-0.5 font-sans text-[10px] font-medium text-subtle;
+  }
+
+  mark.hl {
+    @apply rounded-[2px] bg-ember/20 px-0.5 text-cream;
+  }
+}
+
+@media print {
+  html,
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

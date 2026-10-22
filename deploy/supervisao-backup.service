@@ -1,0 +1,14 @@
+# /etc/systemd/system/supervisao-backup.service
+[Unit]
+Description=Backup diário e manutenção — Supervisão de Atendimento
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=supervisao
+Group=supervisao
+EnvironmentFile=/etc/supervisao/supervisao.env
+WorkingDirectory=/opt/supervisao/app
+ExecStart=/opt/supervisao/app/deploy/backup.sh
+ExecStartPost=/usr/bin/node node_modules/tsx/dist/cli.mjs scripts/maintenance.ts
+UMask=0077

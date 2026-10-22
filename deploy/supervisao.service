@@ -1,0 +1,37 @@
+# /etc/systemd/system/supervisao.service
+[Unit]
+Description=Supervisão de Atendimento (Next.js)
+After=network-online.target
+Wants=network-online.target
+# Se o PostgreSQL estiver no mesmo servidor, descomente:
+# After=postgresql.service
+# Requires=postgresql.service
+
+[Service]
+Type=simple
+User=supervisao
+Group=supervisao
+WorkingDirectory=/opt/supervisao/app
+EnvironmentFile=/etc/supervisao/supervisao.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
+Restart=on-failure
+RestartSec=5
+
+# Endurecimento
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/supervisao /opt/supervisao/app/.next/cache
+ReadOnlyPaths=/var/backups/supervisao
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
