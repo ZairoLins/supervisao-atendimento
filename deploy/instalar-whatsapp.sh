@@ -97,14 +97,16 @@ install -d -m 755 "$STACK_DIR"
 install -m 644 "$APP_DIR/deploy/whatsapp/docker-compose.yml" "$STACK_DIR/docker-compose.yml"
 docker compose -f "$STACK_DIR/docker-compose.yml" pull -q
 docker compose -f "$STACK_DIR/docker-compose.yml" up -d --remove-orphans
+# A rota "/" consulta a versão do WhatsApp Web na internet e pode falhar mesmo com a API pronta;
+# por isso a verificação usa uma rota local autenticada.
 printf 'Aguardando a Evolution API'
 for _ in $(seq 1 60); do
-  if curl -fsS -o /dev/null "$API/"; then break; fi
+  if curl -fs -o /dev/null -H "apikey: $KEY" "$API/instance/fetchInstances"; then break; fi
   printf '.'
   sleep 3
 done
 echo
-curl -fsS -o /dev/null "$API/" || fail "A Evolution API não respondeu. Veja: docker compose -f $STACK_DIR/docker-compose.yml logs api"
+curl -fs -o /dev/null -H "apikey: $KEY" "$API/instance/fetchInstances" || fail "A Evolution API não respondeu. Veja: docker compose -f $STACK_DIR/docker-compose.yml logs api"
 ok "Evolution API em $API (apenas local)"
 
 # 4. Instância
