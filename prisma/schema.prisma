@@ -412,6 +412,8 @@ model Meeting {
   agenda      String        @default("")
   // Aviso automático enviado ao grupo (evita reenvio)
   reminderSentAt DateTime?
+  // Motivo informado ao cancelar
+  cancelReason String?
   // Anotações realizadas durante a reunião (ata)
   minutes     String?
   seriesId    String?       @db.Uuid
@@ -578,6 +580,14 @@ enum MessageTarget {
 enum MessageStatus {
   SENT
   FAILED
+}
+
+// Texto editado de um modelo de mensagem (sem linha = usa o padrão do sistema).
+model MessageTemplate {
+  key         String   @id
+  body        String
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
 }
 
 // Histórico de mensagens enviadas (sem o conteúdo dos anexos).

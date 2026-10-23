@@ -112,6 +112,7 @@ export async function updateMeeting(db: Db, actor: Actor, id: string, raw: unkno
         endMinute,
         location: v.location ?? null,
         agenda: v.agenda,
+        ...(v.status !== "CANCELED" ? { cancelReason: null } : {}),
         // Nova data/horário: o aviso automático volta a valer
         ...(dayNumber(v.date) !== dayNumber(before.date) || startMinute !== before.startMinute ? { reminderSentAt: null } : {}),
       },
@@ -135,6 +136,20 @@ export async function saveMinutes(db: Db, actor: Actor, id: string, raw: unknown
     });
     await reindexMeeting(tx, id);
     await audit(tx, { actorId: actor.id, action: "UPDATE_MINUTES", entityType: "Meeting", entityId: id, summary: `Ata da reunião ${formatCode("meeting", after.code)} registrada`, before, after });
+    return after;
+  });
+}
+
+/** Cancela a reunião guardando o motivo (o aviso ao grupo é enviado à parte, se escolhido). */
+export async function cancelMeeting(db: Db, actor: Actor, id: string, raw: unknown) {
+  assertCan(actor, "meetings:write");
+  const v = z.object({ reason: optionalText(500) }).parse(raw);
+  return db.$transaction(async (tx) => {
+    const before = await tx.meeting.findUnique({ where: { id } });
+    if (!before || before.deletedAt) throw new NotFoundError("Reunião não encontrada.");
+    if (before.status === "CANCELED") throw new ValidationError("Esta reunião já está cancelada.");
+    const after = await tx.meeting.update({ where: { id }, data: { status: "CANCELED", cancelReason: v.reason ?? null } });
+    await audit(tx, { actorId: actor.id, action: "CANCEL", entityType: "Meeting", entityId: id, summary: `Reunião ${formatCode("meeting", after.code)} cancelada`, before, after, reason: v.reason ?? null });
     return after;
   });
 }

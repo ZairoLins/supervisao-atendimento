@@ -9,6 +9,7 @@ import { assertCan, type Actor } from "@/lib/permissions";
 import { formatCode } from "@/lib/text";
 import { intField, optionalText, PAGE_SIZE } from "@/lib/validation";
 import { WhatsAppError, type WhatsAppDocument, type WhatsAppSender } from "./client";
+import { renderTemplate, TEMPLATE_KEYS, TEMPLATES, validateTemplate, type TemplateKey, type TemplateVars } from "./templates";
 
 /**
  * Núcleo dos envios pelo WhatsApp: destinatários, entrega com registro, pauta e aviso de
@@ -22,6 +23,7 @@ export const MESSAGE_KINDS = {
   MONTHLY_METRICS: "Relatório mensal de métricas",
   MEETING_AGENDA: "Pauta de reunião",
   MEETING_REMINDER: "Aviso de reunião",
+  MEETING_CANCELED: "Cancelamento de reunião",
   TEST: "Mensagem de teste",
 } as const;
 export type MessageKind = keyof typeof MESSAGE_KINDS;
@@ -132,11 +134,76 @@ export async function deliver(db: Db, actorId: string | null, sender: WhatsAppSe
   return { ...msg, destinationLabel: dest.label };
 }
 
+// ───────────── Modelos de mensagem ─────────────
+
+/** Texto vigente de cada modelo (editado no painel ou o padrão do sistema). */
+export async function getTemplateBodies(db: Db): Promise<Record<TemplateKey, string>> {
+  const rows = await db.messageTemplate.findMany();
+  const custom = new Map(rows.map((r) => [r.key, r.body]));
+  return Object.fromEntries(TEMPLATE_KEYS.map((k) => [k, custom.get(k) ?? TEMPLATES[k].defaultBody])) as Record<TemplateKey, string>;
+}
+
+export async function renderMessage(db: Db, key: TemplateKey, vars: TemplateVars) {
+  const row = await db.messageTemplate.findUnique({ where: { key } });
+  return renderTemplate(row?.body ?? TEMPLATES[key].defaultBody, vars);
+}
+
+export async function listTemplates(db: Db, actor: Actor) {
+  assertCan(actor, "messages:send");
+  const rows = await db.messageTemplate.findMany();
+  return TEMPLATE_KEYS.map((key) => {
+    const row = rows.find((r) => r.key === key);
+    return { ...TEMPLATES[key], body: row?.body ?? TEMPLATES[key].defaultBody, customized: Boolean(row), updatedAt: row?.updatedAt ?? null };
+  });
+}
+
+export async function saveTemplate(db: Db, actor: Actor, raw: unknown) {
+  assertCan(actor, "messages:send");
+  const v = z
+    .object({
+      key: z.enum(TEMPLATE_KEYS, { error: "Modelo inválido." }),
+      body: z.preprocess((x) => (typeof x === "string" ? x.replace(/\r\n/g, "\n").trim() : x), z.string().max(4000, "A mensagem deve ter até 4.000 caracteres.")),
+    })
+    .parse(raw);
+  const problems = validateTemplate(v.key, v.body);
+  if (problems.length) throw new ValidationError(problems[0], { body: problems.join(" ") });
+  const before = await db.messageTemplate.findUnique({ where: { key: v.key } });
+  if (v.body === TEMPLATES[v.key].defaultBody) {
+    if (before) await db.messageTemplate.delete({ where: { key: v.key } });
+  } else {
+    await db.messageTemplate.upsert({ where: { key: v.key }, create: { key: v.key, body: v.body, updatedById: actor.id }, update: { body: v.body, updatedById: actor.id } });
+  }
+  await audit(db, { actorId: actor.id, action: "UPDATE", entityType: "MessageTemplate", entityId: v.key, summary: `Modelo "${TEMPLATES[v.key].label}" atualizado` });
+}
+
+export async function resetTemplate(db: Db, actor: Actor, key: string) {
+  assertCan(actor, "messages:send");
+  if (!(TEMPLATE_KEYS as readonly string[]).includes(key)) throw new ValidationError("Modelo inválido.");
+  await db.messageTemplate.deleteMany({ where: { key } });
+  await audit(db, { actorId: actor.id, action: "RESET", entityType: "MessageTemplate", entityId: key, summary: `Modelo "${TEMPLATES[key as TemplateKey].label}" restaurado para o padrão` });
+}
+
+// ───────────── Reuniões ─────────────
+
 const longWeekday = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", weekday: "long" });
 
-function meetingWhen(m: { date: Date; startMinute: number; endMinute: number | null }) {
+type MeetingForText = { title: string; code: number; date: Date; startMinute: number; endMinute: number | null; location: string | null; agenda: string };
+
+/** Variáveis comuns das mensagens de reunião. */
+export function meetingVars(m: MeetingForText): TemplateVars {
   const wd = longWeekday.format(m.date);
-  return `${wd.charAt(0).toUpperCase()}${wd.slice(1)}, ${formatDate(m.date)} · ${formatTime(m.startMinute)}${m.endMinute ? `–${formatTime(m.endMinute)}` : ""}`;
+  const dia = `${wd.charAt(0).toUpperCase()}${wd.slice(1)}`;
+  const horario = `${formatTime(m.startMinute)}${m.endMinute ? `–${formatTime(m.endMinute)}` : ""}`;
+  return {
+    titulo: m.title,
+    quando: `${dia}, ${formatDate(m.date)} · ${horario}`,
+    data: formatDate(m.date),
+    dia_semana: dia,
+    horario,
+    local: m.location,
+    codigo: formatCode("meeting", m.code),
+    pauta: m.agenda.trim() ? markdownToWhatsApp(m.agenda) : "",
+  };
 }
 
 async function loadMeeting(db: Db, id: string) {
@@ -146,13 +213,8 @@ async function loadMeeting(db: Db, id: string) {
 }
 
 /** Texto da pauta para o gestor (com decisões, quando já registradas). */
-export function meetingAgendaText(m: { title: string; code: number; date: Date; startMinute: number; endMinute: number | null; location: string | null; agenda: string; decisions: Array<{ description: string }> }) {
-  const lines = [`*Pauta — ${m.title}*`, `🗓 ${meetingWhen(m)}`];
-  if (m.location) lines.push(`📍 ${m.location}`);
-  lines.push("", m.agenda.trim() ? markdownToWhatsApp(m.agenda) : "_Pauta ainda não preenchida._");
-  if (m.decisions.length) lines.push("", "*Decisões e encaminhamentos*", ...m.decisions.map((d) => `• ${d.description}`));
-  lines.push("", `_${formatCode("meeting", m.code)} · Supervisão de Atendimento_`);
-  return lines.join("\n");
+export async function meetingAgendaText(db: Db, m: MeetingForText & { decisions: Array<{ description: string }> }) {
+  return renderMessage(db, "MEETING_AGENDA", { ...meetingVars(m), decisoes: m.decisions.map((d) => `• ${d.description}`).join("\n") });
 }
 
 export async function sendMeetingAgendaToManager(db: Db, actor: Actor, meetingId: string, sender: WhatsAppSender) {
@@ -164,26 +226,37 @@ export async function sendMeetingAgendaToManager(db: Db, actor: Actor, meetingId
     target: "MANAGER",
     summary: `${m.title} (${formatDate(m.date)})`,
     entityId: m.id,
-    text: meetingAgendaText(m),
+    text: await meetingAgendaText(db, m),
   });
 }
 
 // ───────────── Grupo ─────────────
 
-export function meetingReminderText(m: { title: string; date: Date; startMinute: number; endMinute: number | null; location: string | null; agenda: string }) {
-  const lines = ["📣 *Lembrete de reunião*", "", `*${m.title}*`, `🗓 ${meetingWhen(m)}`];
-  if (m.location) lines.push(`📍 ${m.location}`);
-  if (m.agenda.trim()) lines.push("", "*Pauta:*", "", markdownToWhatsApp(m.agenda));
-  lines.push("", "Conto com a presença de todos!");
-  return lines.join("\n");
+export async function meetingReminderText(db: Db, m: MeetingForText) {
+  return renderMessage(db, "MEETING_REMINDER", meetingVars(m));
 }
 
 export async function sendMeetingReminderToGroup(db: Db, actor: Actor, meetingId: string, sender: WhatsAppSender) {
   assertCan(actor, "messages:send");
   const m = await loadMeeting(db, meetingId);
-  const msg = await deliver(db, actor.id, sender, { kind: "MEETING_REMINDER", target: "GROUP", summary: `${m.title} (${formatDate(m.date)})`, entityId: m.id, text: meetingReminderText(m) });
+  if (m.status === "CANCELED") throw new ValidationError("A reunião está cancelada. Envie o aviso de cancelamento.");
+  const msg = await deliver(db, actor.id, sender, { kind: "MEETING_REMINDER", target: "GROUP", summary: `${m.title} (${formatDate(m.date)})`, entityId: m.id, text: await meetingReminderText(db, m) });
   await db.meeting.update({ where: { id: m.id }, data: { reminderSentAt: new Date() } });
   return msg;
+}
+
+/** Aviso de cancelamento ao grupo (a reunião precisa estar cancelada). */
+export async function sendMeetingCancellationToGroup(db: Db, actor: Actor, meetingId: string, sender: WhatsAppSender) {
+  assertCan(actor, "messages:send");
+  const m = await loadMeeting(db, meetingId);
+  if (m.status !== "CANCELED") throw new ValidationError("Cancele a reunião antes de enviar o aviso de cancelamento.");
+  return deliver(db, actor.id, sender, {
+    kind: "MEETING_CANCELED",
+    target: "GROUP",
+    summary: `${m.title} (${formatDate(m.date)})${m.cancelReason ? ` · ${m.cancelReason.slice(0, 80)}` : ""}`,
+    entityId: m.id,
+    text: await renderMessage(db, "MEETING_CANCELED", { ...meetingVars(m), motivo: m.cancelReason }),
+  });
 }
 
 /**
@@ -206,7 +279,7 @@ export async function runAutomaticReminders(db: Db, sender: WhatsAppSender, now:
     const opensAt = start - s.reminderHoursBefore * 3_600_000;
     if (now.getTime() < opensAt || now.getTime() >= start) continue;
     try {
-      await deliver(db, null, sender, { kind: "MEETING_REMINDER", target: "GROUP", summary: `${m.title} (${formatDate(m.date)})`, entityId: m.id, text: meetingReminderText(m), automatic: true });
+      await deliver(db, null, sender, { kind: "MEETING_REMINDER", target: "GROUP", summary: `${m.title} (${formatDate(m.date)})`, entityId: m.id, text: await meetingReminderText(db, m), automatic: true });
       await db.meeting.update({ where: { id: m.id }, data: { reminderSentAt: new Date() } });
       sent++;
     } catch {

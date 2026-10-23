@@ -4,6 +4,7 @@ import { REVIEW_STATUS } from "@/lib/labels";
 import { assertCan, type Actor } from "@/lib/permissions";
 import { formatCode } from "@/lib/text";
 import { teamAttendanceSummary } from "@/modules/attendance/occurrences";
+import { renderTemplate, TEMPLATES, type TemplateVars } from "@/modules/whatsapp/templates";
 import { brandedPdf, COLORS, nf } from "./brand";
 
 const { BLACK, INK, MUTED, SUBTLE, SOFT, BLUE } = COLORS;
@@ -83,14 +84,24 @@ export async function occurrencesReportData(db: Db, actor: Actor, from: Date, to
 }
 
 /** Resumo em texto (formatação do WhatsApp) para acompanhar o PDF. */
+/** Variáveis do modelo de mensagem "Ocorrências da folha". */
+export function occurrencesVars(r: Omit<OccurrencesReport, "generatedAt">): TemplateVars {
+  return {
+    periodo: payrollLabel(r),
+    tem_ocorrencias: r.total ? "sim" : "",
+    total: String(r.total),
+    colaboradores: String(r.employees.length),
+    equipe: String(r.team),
+    ausencia: formatDuration(r.absenceMinutes),
+    a_conferir: r.pending ? String(r.pending) : "",
+    por_tipo: r.byType.map(([t, n]) => `• ${t}: ${n}`).join("\n"),
+    por_colaborador: r.employees.map((e) => `• ${e.name}: ${Object.entries(e.byType).map(([t, n]) => `${t} ${n}`).join(", ")}`).join("\n"),
+  };
+}
+
+/** Resumo com o modelo padrão (o envio usa o modelo editado, se houver). */
 export function occurrencesSummaryText(r: Omit<OccurrencesReport, "generatedAt">): string {
-  const lines = [`*Ocorrências — ${payrollLabel(r)}*`, ""];
-  if (r.total === 0) return [...lines, "Nenhuma ocorrência registrada no período."].join("\n");
-  lines.push(`• Ocorrências: *${r.total}*`, `• Colaboradores com ocorrência: *${r.employees.length}* de ${r.team}`, `• Ausência estimada: *${formatDuration(r.absenceMinutes)}*`);
-  if (r.pending) lines.push(`• A conferir: ${r.pending}`);
-  lines.push("", "*Por tipo*", ...r.byType.map(([t, n]) => `• ${t}: ${n}`), "", "*Por colaborador*");
-  for (const e of r.employees) lines.push(`• ${e.name}: ${Object.entries(e.byType).map(([t, n]) => `${t} ${n}`).join(", ")}`);
-  return lines.join("\n");
+  return renderTemplate(TEMPLATES.OCCURRENCES.defaultBody, occurrencesVars(r));
 }
 
 export async function renderOccurrencesPdf(r: OccurrencesReport, timeZone: string): Promise<Buffer> {

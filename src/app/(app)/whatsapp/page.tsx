@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CircleCheck, CircleX, FileText, LineChart, Send, Smartphone } from "lucide-react";
+import { CircleCheck, CircleX, FileText, LineChart, MessageSquareText, Send, Smartphone } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { env } from "@/lib/env";
@@ -56,6 +56,11 @@ export default async function WhatsAppPage(props: PageProps<"/whatsapp">) {
         eyebrow="Envios"
         title="WhatsApp"
         description="Envie ao gestor as ocorrências da folha, as pautas e o relatório mensal, e avise o grupo do Suporte Interno sobre a reunião semanal. Pautas e avisos também podem ser enviados pela página de cada reunião."
+        actions={
+          <Link href="/whatsapp/mensagens" className="btn btn-secondary">
+            <MessageSquareText className="size-3.5" aria-hidden /> Modelos de mensagem
+          </Link>
+        }
       />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">

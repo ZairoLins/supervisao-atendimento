@@ -92,6 +92,12 @@ Gerados no servidor (`/api/relatorios`), com parâmetros validados por Zod, perm
 
 `modules/whatsapp/core.ts` guarda destinatários, registra cada envio em `OutboundMessage` e na auditoria, monta a pauta (Markdown convertido para a formatação do WhatsApp) e o aviso de reunião. `service.ts` acrescenta os envios ao gestor que geram PDF (ocorrências da folha e relatório mensal). O aviso automático roda fora do Next, em `scripts/send-reminders.ts`, chamado a cada 10 minutos pelo timer `supervisao-avisos`: reuniões **semanais** agendadas recebem um aviso quando faltam N horas (configurável), uma única vez (`Meeting.reminderSentAt`).
 
+### Modelos de mensagem
+
+Os textos (aviso de reunião, cancelamento, pauta ao gestor, ocorrências da folha e legenda do relatório mensal) ficam em `modules/whatsapp/templates.ts` como padrão e podem ser editados em **WhatsApp › Modelos de mensagem**, com pré-visualização no formato do WhatsApp. Sintaxe: `{{variavel}}`, `{{#variavel}}…{{/variavel}}` (só com valor) e `{{^variavel}}…{{/variavel}}` (só vazia). Ao salvar, variáveis desconhecidas e blocos sem fechamento são recusados; salvar o texto padrão remove a personalização.
+
+Cancelar uma reunião grava o motivo (`cancelReason`) e, se marcado, envia o modelo de cancelamento ao grupo; reuniões canceladas não recebem lembrete (manual ou automático).
+
 ## Kanban da semana
 
 `modules/kanban/service.ts`: cartões por semana (segunda-feira) em três colunas; mover renumera as colunas envolvidas; concluir grava `completedAt`; "trazer pendências" move para a semana atual o que ficou em A fazer/Fazendo nas semanas anteriores. O quadro usa arrastar e soltar (HTML5) com atualização otimista, e botões de seta como alternativa por teclado/toque.

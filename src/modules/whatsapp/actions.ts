@@ -3,11 +3,15 @@
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
 import { isValidDateKey, parseDateKey } from "@/lib/dates";
-import { ValidationError } from "@/lib/errors";
+import { AppError, ValidationError } from "@/lib/errors";
 import { isUuid } from "@/lib/page";
+import { cancelMeeting } from "@/modules/meetings/service";
 import { defaultSender } from "./client";
 import {
+  resetTemplate,
   saveNotificationSettings,
+  saveTemplate,
+  sendMeetingCancellationToGroup,
   sendMeetingAgendaToManager,
   sendMeetingReminderToGroup,
   sendMonthlyMetricsToManager,
@@ -61,6 +65,45 @@ export async function sendMeetingReminderAction(meetingId: string, _: ActionStat
   return runAction(fd, async (actor) => {
     const r = await sendMeetingReminderToGroup(db, actor, checkId(meetingId), defaultSender());
     return { message: `Aviso enviado para ${r.destinationLabel}.`, revalidate: [`/reunioes/${meetingId}`, PAGE] };
+  });
+}
+
+/** Cancela a reunião e, se marcado, avisa o grupo. Uma falha no envio não desfaz o cancelamento. */
+export async function cancelMeetingAction(meetingId: string, _: ActionState, fd: FormData) {
+  return runAction(fd, async (actor) => {
+    const id = checkId(meetingId);
+    await cancelMeeting(db, actor, id, formToObject(fd));
+    const revalidate = [`/reunioes/${id}`, "/reunioes", "/", PAGE];
+    // O formulário some após o cancelamento: o resultado do aviso vai para o topo da página
+    if (fd.get("notify") !== "on") return { redirectTo: `/reunioes/${id}?cancelada=1`, revalidate };
+    try {
+      await sendMeetingCancellationToGroup(db, actor, id, defaultSender());
+      return { redirectTo: `/reunioes/${id}?cancelada=1&aviso=enviado`, revalidate };
+    } catch (e) {
+      if (!(e instanceof AppError)) console.error("[whatsapp] falha no aviso de cancelamento:", e instanceof Error ? e.name : "desconhecido");
+      return { redirectTo: `/reunioes/${id}?cancelada=1&aviso=falhou`, revalidate };
+    }
+  });
+}
+
+export async function sendCancellationAction(meetingId: string, _: ActionState, fd: FormData) {
+  return runAction(fd, async (actor) => {
+    const r = await sendMeetingCancellationToGroup(db, actor, checkId(meetingId), defaultSender());
+    return { message: `Aviso de cancelamento enviado para ${r.destinationLabel}.`, revalidate: [`/reunioes/${meetingId}`, PAGE] };
+  });
+}
+
+export async function saveTemplateAction(_: ActionState, fd: FormData) {
+  return runAction(fd, async (actor) => {
+    await saveTemplate(db, actor, formToObject(fd));
+    return { message: "Modelo salvo. Os próximos envios já usam este texto.", revalidate: [`${PAGE}/mensagens`] };
+  });
+}
+
+export async function resetTemplateAction(key: string, _: ActionState, fd: FormData) {
+  return runAction(fd, async (actor) => {
+    await resetTemplate(db, actor, key);
+    return { message: "Modelo restaurado para o padrão.", revalidate: [`${PAGE}/mensagens`] };
   });
 }
 

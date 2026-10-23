@@ -9,6 +9,7 @@ PostgreSQL com Prisma 7 (`prisma/schema.prisma`). IDs são UUID v7 (estáveis e 
 | `20261022194931_init` | todas as tabelas, enums, FKs, índices, extensão `pg_trgm`, índices GIN trigram e restrições CHECK |
 | `20261022210000_occurrence_after_midnight` | permite ocorrências na parte do plantão após a meia-noite (início até 47:59 relativo à data do turno) |
 | `20261023180000_metricas_semanais_sabado` | métricas passam a ser semanais (`WeeklyMetric`, lançamentos diários consolidados por semana), horário específico por dia da semana nas jornadas e sábado 08:00–12:00 na jornada padrão de Funcionário |
+| `20261024150000_modelos_mensagem_cancelamento` | `MessageTemplate` (texto editado dos modelos de mensagem) e `Meeting.cancelReason` |
 | `20261024120000_pauta_markdown_whatsapp_kanban` | pauta em Markdown (`Meeting.agenda`, `MeetingTemplate.agenda`; itens antigos convertidos em checklist, discutidos como `- [x]`), `ratingCount` nas métricas, `KanbanCard`, `NotificationSettings` e `OutboundMessage` |
 | `20261023120000_metricas_diarias_sem_tarefas` | métricas passam a ser diárias (tabela renomeada, dados preservados no 1º dia do mês), modo de horário dos tipos de ocorrência (chegada/saída/período) e remoção das tabelas de tarefas |
 
@@ -31,7 +32,7 @@ Em produção use sempre `npm run db:migrate` (`prisma migrate deploy`), que só
 | `Attachment` | metadados de anexos privados (arquivo em `ATTACHMENTS_DIR`) | ocorrência |
 | `WeeklyMetric` | métricas de uma semana (`weekStart` = segunda-feira), com `ratingCount` (quantidade de avaliações; nulo em lançamentos antigos); snapshot de função/equipe | `Employee`, revisões |
 | `WeeklyMetricRevision` | valores anteriores a cada correção ou ajuste, com motivo | métrica (cascade) |
-| `Meeting` | reunião (semanal/extraordinária), pauta em Markdown (`agenda`), ata (`minutes`) e `reminderSentAt` (aviso ao grupo já enviado) | decisões, participantes, série |
+| `Meeting` | reunião (semanal/extraordinária), pauta em Markdown (`agenda`), ata (`minutes`) `reminderSentAt` (aviso ao grupo já enviado) e `cancelReason` | decisões, participantes, série |
 | `MeetingDecision` | decisões e encaminhamentos | reunião (cascade) |
 | `MeetingParticipant` | participantes e presença | reunião, colaborador |
 | `MeetingTemplate` / `MeetingSeries` | modelos de pauta / recorrência semanal que gera reuniões independentes | — |
@@ -39,6 +40,7 @@ Em produção use sempre `npm run db:migrate` (`prisma migrate deploy`), que só
 | `EmployeeNote` | anotações profissionais (separadas de feedback e frequência) | `Employee` |
 | `KanbanCard` | tarefa do quadro da semana (coluna, posição, prioridade, prazo) | — |
 | `NotificationSettings` | linha única (id = 1): número do gestor, grupo do WhatsApp e aviso automático | — |
+| `MessageTemplate` | texto editado de um modelo de mensagem (chave = tipo); sem linha, vale o padrão do código | — |
 | `OutboundMessage` | histórico de envios pelo WhatsApp (tipo, destino, resultado; sem o conteúdo dos anexos) | — |
 
 O **calendário de turnos (ShiftCalendar)** não é materializado: é derivado de forma determinística de `EmployeeScheduleAssignment` + regra da jornada, com `ShiftAdjustment` sobreposto. Assim, a escala prevista original nunca é apagada e o histórico é reconstruível para qualquer data.

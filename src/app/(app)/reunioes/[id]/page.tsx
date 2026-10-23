@@ -23,7 +23,7 @@ import {
 } from "@/modules/meetings/actions";
 import { agendaStats } from "@/lib/markdown";
 import { lastMessagesFor } from "@/modules/whatsapp/service";
-import { sendMeetingAgendaAction, sendMeetingReminderAction } from "@/modules/whatsapp/actions";
+import { cancelMeetingAction, sendCancellationAction, sendMeetingAgendaAction, sendMeetingReminderAction } from "@/modules/whatsapp/actions";
 import { Markdown } from "@/components/ui/markdown";
 import { MarkdownField } from "@/components/ui/markdown-field";
 import { AGENDA_HINT } from "../meeting-form";
@@ -31,6 +31,12 @@ import { ActionForm, CheckboxField, CheckboxGroup, FormMessage, Hidden, SubmitBu
 import { Badge, LabelBadge, Notice, PageHeader, Panel } from "@/components/ui/primitives";
 
 export const metadata: Metadata = { title: "Reunião" };
+
+const SENT_LABEL: Record<string, string> = {
+  MEETING_AGENDA: "pauta ao gestor",
+  MEETING_REMINDER: "aviso ao grupo",
+  MEETING_CANCELED: "cancelamento ao grupo",
+};
 
 export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
   const actor = await requirePermission("meetings:read");
@@ -59,6 +65,18 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
         actions={canWrite ? <Link href={`/reunioes/${id}/editar`} className="btn btn-secondary"><Pencil className="size-3.5" aria-hidden /> Editar</Link> : null}
       />
       {params.salvo ? <div className="mb-6"><Notice tone="ok">Reunião salva.</Notice></div> : null}
+      {m.status === "CANCELED" ? (
+        <div className="mb-6 flex flex-col gap-3">
+          <Notice tone="warn">Reunião cancelada{m.cancelReason ? ` — motivo: ${m.cancelReason}` : "."}</Notice>
+          {params.aviso === "enviado" ? <Notice tone="ok">Aviso de cancelamento enviado ao grupo.</Notice> : null}
+          {params.aviso === "falhou" ? (
+            <Notice tone="danger">
+              O aviso ao grupo não foi enviado
+              {sent[0]?.kind === "MEETING_CANCELED" && sent[0].status === "FAILED" && sent[0].error ? `: ${sent[0].error}` : " (verifique a conexão e os destinatários na aba WhatsApp)."} Depois, use “Avisar o grupo do cancelamento”.
+            </Notice>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
         <div className="flex flex-col gap-5">
@@ -177,24 +195,34 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
                   <SubmitButton variant="secondary" className="btn-sm self-start" confirm="Enviar a pauta desta reunião ao gestor?"><Send className="size-3.5" aria-hidden /> Enviar pauta ao gestor</SubmitButton>
                   <FormMessage />
                 </ActionForm>
-                <ActionForm action={sendMeetingReminderAction.bind(null, id)} className="flex flex-col gap-2">
-                  <SubmitButton variant="secondary" className="btn-sm self-start" confirm={m.reminderSentAt ? "O aviso já foi enviado. Enviar de novo ao grupo?" : "Enviar o aviso desta reunião ao grupo?"}>
-                    <Megaphone className="size-3.5" aria-hidden /> Avisar o grupo
-                  </SubmitButton>
-                  <p className="text-xs text-subtle">
-                    {m.reminderSentAt ? `Aviso enviado em ${formatDateTime(m.reminderSentAt, tz)}.` : m.type === "WEEKLY" ? "Reunião semanal: o aviso automático é enviado se estiver ativado em WhatsApp." : "Aviso ainda não enviado."}
-                  </p>
-                  <FormMessage />
-                </ActionForm>
+                {m.status === "CANCELED" ? (
+                  <ActionForm action={sendCancellationAction.bind(null, id)} className="flex flex-col gap-2">
+                    <SubmitButton variant="secondary" className="btn-sm self-start" confirm="Enviar ao grupo o aviso de cancelamento?">
+                      <Megaphone className="size-3.5" aria-hidden /> {sent.some((s) => s.kind === "MEETING_CANCELED" && s.status === "SENT") ? "Reenviar aviso de cancelamento" : "Avisar o grupo do cancelamento"}
+                    </SubmitButton>
+                    <FormMessage />
+                  </ActionForm>
+                ) : (
+                  <ActionForm action={sendMeetingReminderAction.bind(null, id)} className="flex flex-col gap-2">
+                    <SubmitButton variant="secondary" className="btn-sm self-start" confirm={m.reminderSentAt ? "O aviso já foi enviado. Enviar de novo ao grupo?" : "Enviar o aviso desta reunião ao grupo?"}>
+                      <Megaphone className="size-3.5" aria-hidden /> Avisar o grupo
+                    </SubmitButton>
+                    <p className="text-xs text-subtle">
+                      {m.reminderSentAt ? `Aviso enviado em ${formatDateTime(m.reminderSentAt, tz)}.` : m.type === "WEEKLY" ? "Reunião semanal: o aviso automático é enviado se estiver ativado em WhatsApp." : "Aviso ainda não enviado."}
+                    </p>
+                    <FormMessage />
+                  </ActionForm>
+                )}
                 {sent.length ? (
                   <ul className="flex flex-col gap-1 border-t border-line pt-3 text-xs text-subtle">
                     {sent.map((s) => (
                       <li key={s.id}>
-                        {formatDateTime(s.createdAt, tz)} · {s.kind === "MEETING_AGENDA" ? "pauta ao gestor" : "aviso ao grupo"} · {s.status === "SENT" ? "enviado" : <span className="text-danger">falhou</span>}
+                        {formatDateTime(s.createdAt, tz)} · {SENT_LABEL[s.kind] ?? s.kind} · {s.status === "SENT" ? "enviado" : <span className="text-danger">falhou</span>}
                       </li>
                     ))}
                   </ul>
                 ) : null}
+                <Link href="/whatsapp/mensagens" className="link text-xs">Editar o texto das mensagens</Link>
               </div>
             </Panel>
           ) : null}
@@ -203,6 +231,16 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
               <ActionForm action={templateFromMeetingAction.bind(null, id)} resetOnSuccess className="flex flex-col gap-4">
                 <TextField name="name" label="Nome do modelo" required maxLength={120} />
                 <SubmitButton variant="secondary" className="btn-sm self-start">Salvar como modelo</SubmitButton>
+                <FormMessage />
+              </ActionForm>
+            </Panel>
+          ) : null}
+          {canWrite && m.status !== "CANCELED" ? (
+            <Panel title="Cancelar reunião" description="A reunião fica registrada como cancelada, com o motivo.">
+              <ActionForm action={cancelMeetingAction.bind(null, id)} className="flex flex-col gap-4">
+                <TextAreaField name="reason" label="Motivo" rows={2} maxLength={500} placeholder="Ex.: treinamento da equipe no mesmo horário" />
+                {canSend ? <CheckboxField name="notify" label="Avisar o grupo pelo WhatsApp" defaultChecked /> : null}
+                <SubmitButton variant="danger" className="btn-sm self-start" confirm="Cancelar esta reunião?">Cancelar reunião</SubmitButton>
                 <FormMessage />
               </ActionForm>
             </Panel>

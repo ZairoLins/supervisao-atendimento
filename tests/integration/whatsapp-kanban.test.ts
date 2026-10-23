@@ -1,13 +1,18 @@
 ﻿import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { parseDateKey } from "@/lib/dates";
 import { AppError } from "@/lib/errors";
-import { createMeeting, saveAgenda } from "@/modules/meetings/service";
+import { cancelMeeting, createMeeting, saveAgenda } from "@/modules/meetings/service";
+import { TEMPLATES } from "@/modules/whatsapp/templates";
 import { createMetric } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import type { WhatsAppDocument, WhatsAppSender } from "@/modules/whatsapp/client";
 import { WhatsAppError } from "@/modules/whatsapp/client";
 import {
   listMessages,
+  listTemplates,
+  resetTemplate,
+  saveTemplate,
+  sendMeetingCancellationToGroup,
   runAutomaticReminders,
   saveNotificationSettings,
   sendMeetingAgendaToManager,
@@ -103,6 +108,45 @@ describe.skipIf(!hasTestDb)("WhatsApp", () => {
     const [msg] = (await listMessages(testDb(), sup)).items;
     expect(msg).toMatchObject({ status: "FAILED", target: "GROUP", destination: "Suporte Interno" });
     expect((await testDb().meeting.findUniqueOrThrow({ where: { id: m.id } })).reminderSentAt).toBeNull();
+  });
+
+  it("cancela a reunião com motivo e avisa o grupo; o lembrete deixa de valer", async () => {
+    const sup = await createUser();
+    await saveNotificationSettings(testDb(), sup, settings);
+    const m = await createMeeting(testDb(), sup, { title: "Reunião semanal", type: "WEEKLY", date: "2026-10-26", startTime: "09:00" });
+    const sender = fakeSender();
+    await expect(sendMeetingCancellationToGroup(testDb(), sup, m.id, sender)).rejects.toThrow(/Cancele a reunião/);
+    await cancelMeeting(testDb(), sup, m.id, { reason: "Treinamento da equipe" });
+    await expect(cancelMeeting(testDb(), sup, m.id, {})).rejects.toThrow(/já está cancelada/);
+    expect(await testDb().meeting.findUniqueOrThrow({ where: { id: m.id } })).toMatchObject({ status: "CANCELED", cancelReason: "Treinamento da equipe" });
+    await sendMeetingCancellationToGroup(testDb(), sup, m.id, sender);
+    expect(sender.sent[0].text).toContain("⚠️ *Reunião cancelada*");
+    expect(sender.sent[0].text).toContain("*Motivo:* Treinamento da equipe");
+    await expect(sendMeetingReminderToGroup(testDb(), sup, m.id, sender)).rejects.toThrow(/cancelada/);
+    expect((await runAutomaticReminders(testDb(), sender, new Date("2026-10-26T10:05:00Z"))).sent).toBe(0);
+    expect(await testDb().auditLog.count({ where: { action: "CANCEL", entityId: m.id } })).toBe(1);
+  });
+
+  it("usa o modelo editado no painel e volta ao padrão ao restaurar", async () => {
+    const sup = await createUser();
+    await saveNotificationSettings(testDb(), sup, settings);
+    const m = await createMeeting(testDb(), sup, { title: "Semanal", type: "WEEKLY", date: "2026-10-26", startTime: "09:00", location: "Sala 2" });
+    await expect(saveTemplate(testDb(), sup, { key: "MEETING_REMINDER", body: "Oi {{nome}}" })).rejects.toThrow(/desconhecida/);
+    await expect(saveTemplate(testDb(), sup, { key: "OUTRO", body: "x" })).rejects.toThrow();
+    await saveTemplate(testDb(), sup, { key: "MEETING_REMINDER", body: "Pessoal, reunião *{{titulo}}* em {{data}}{{#local}} ({{local}}){{/local}}." });
+    const list = await listTemplates(testDb(), sup);
+    expect(list.find((t) => t.key === "MEETING_REMINDER")?.customized).toBe(true);
+    const sender = fakeSender();
+    await sendMeetingReminderToGroup(testDb(), sup, m.id, sender);
+    expect(sender.sent[0].text).toBe("Pessoal, reunião *Semanal* em 26/10/2026 (Sala 2).");
+    await resetTemplate(testDb(), sup, "MEETING_REMINDER");
+    await sendMeetingReminderToGroup(testDb(), sup, m.id, sender);
+    expect(sender.sent[1].text).toContain("📣 *Lembrete de reunião*");
+    // Salvar exatamente o padrão não guarda cópia
+    await saveTemplate(testDb(), sup, { key: "MEETING_CANCELED", body: TEMPLATES.MEETING_CANCELED.defaultBody });
+    expect(await testDb().messageTemplate.count()).toBe(0);
+    const assistant = await createUser("ASSISTANT");
+    await expect(saveTemplate(testDb(), assistant, { key: "MEETING_REMINDER", body: "x" })).rejects.toBeInstanceOf(AppError);
   });
 
   it("aviso automático: só reuniões semanais, dentro da janela, uma vez", async () => {
