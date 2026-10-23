@@ -7,6 +7,7 @@ import { can } from "@/lib/permissions";
 import { today } from "@/lib/page";
 import { formatDate, formatTime, formatWeekday, toDateKey } from "@/lib/dates";
 import { MEETING_STATUS, MEETING_TYPE } from "@/lib/labels";
+import { agendaStats } from "@/lib/markdown";
 import { formatCode } from "@/lib/text";
 import { pageParam, pickEnum, readParams, safeDateParam } from "@/lib/validation";
 import { listMeetings } from "@/modules/meetings/service";
@@ -90,7 +91,7 @@ export default async function MeetingsPage(props: PageProps<"/reunioes">) {
                   <div className="min-w-0">
                     <Link href={`/reunioes/${m.id}`} className="link">{m.title}</Link>
                     <p className="mt-1 text-xs text-subtle">
-                      {formatCode("meeting", m.code)} · {formatTime(m.startMinute)}{m.endMinute ? `–${formatTime(m.endMinute)}` : ""} · {m._count.agendaItems} item(ns) de pauta · {m._count.participants} participante(s) · {m._count.decisions} decisão(ões)
+                      {formatCode("meeting", m.code)} · {formatTime(m.startMinute)}{m.endMinute ? `–${formatTime(m.endMinute)}` : ""} · {agendaStats(m.agenda).items} item(ns) de pauta · {m._count.participants} participante(s) · {m._count.decisions} decisão(ões)
                     </p>
                   </div>
                   <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:justify-end">

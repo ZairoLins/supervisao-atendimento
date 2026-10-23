@@ -17,6 +17,10 @@ export const PERMISSIONS = [
   "notes:read",
   "notes:write",
   "reports:export",
+  // Envio de relatórios e avisos pelo WhatsApp
+  "messages:send",
+  // Quadro Kanban de tarefas da semana
+  "kanban:manage",
   "settings:manage",
   "audit:read",
 ] as const;

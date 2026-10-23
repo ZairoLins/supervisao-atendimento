@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { ActionState } from "@/lib/action";
 import { formatTime, toDateKey } from "@/lib/dates";
 import { MEETING_STATUS, MEETING_TYPE, options } from "@/lib/labels";
-import { ActionForm, CheckboxGroup, FormMessage, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
+import { ActionForm, CheckboxGroup, FormMessage, SelectField, SubmitButton, TextField } from "@/components/ui/form";
+import { MarkdownField } from "@/components/ui/markdown-field";
 
 type Defaults = {
   title?: string;
@@ -13,7 +14,11 @@ type Defaults = {
   endMinute?: number | null;
   location?: string | null;
   participantIds?: string[];
+  agenda?: string;
 };
+
+export const AGENDA_HINT = "Markdown: **negrito**, *itálico*, ## títulos, listas e \"- [ ] item\" para checklist (marcado na reunião como discutido).";
+const AGENDA_PLACEHOLDER = "## Abertura\n- [ ] Recados da semana\n\n## Indicadores\n- [ ] Chamados e avaliações\n- [ ] **Pontos de atenção**";
 
 export function MeetingForm({
   action,
@@ -46,14 +51,21 @@ export function MeetingForm({
       <div className="md:col-span-2">
         <CheckboxGroup name="participantIds" label="Participantes" options={employees} defaultValues={defaults.participantIds ?? []} columns={3} />
       </div>
-      {!isEdit ? (
-        <fieldset className="grid grid-cols-1 gap-6 border-t border-line pt-6 md:col-span-2 md:grid-cols-2">
-          <legend className="sr-only">Pauta planejada</legend>
-          <TextAreaField name="agenda" label="Pauta planejada (um item por linha)" rows={6} className="md:col-span-2" hint="Se vazio, a pauta pode vir de um modelo ou de uma reunião anterior." />
-          {templates?.length ? <SelectField name="templateId" label="Usar modelo" options={templates} placeholder="Nenhum" /> : null}
-          {previousMeetings?.length ? <SelectField name="copyFromMeetingId" label="Reutilizar pauta de reunião anterior" options={previousMeetings} placeholder="Nenhuma" /> : null}
-        </fieldset>
-      ) : null}
+      <fieldset className="grid grid-cols-1 gap-6 border-t border-line pt-6 md:col-span-2 md:grid-cols-2">
+        <legend className="sr-only">Pauta planejada</legend>
+        <MarkdownField
+          name="agenda"
+          label="Pauta planejada"
+          rows={10}
+          maxLength={20000}
+          defaultValue={defaults.agenda}
+          placeholder={AGENDA_PLACEHOLDER}
+          className="md:col-span-2"
+          hint={isEdit ? AGENDA_HINT : `${AGENDA_HINT} Se vazio, a pauta pode vir de um modelo ou de uma reunião anterior.`}
+        />
+        {!isEdit && templates?.length ? <SelectField name="templateId" label="Usar modelo" options={templates} placeholder="Nenhum" /> : null}
+        {!isEdit && previousMeetings?.length ? <SelectField name="copyFromMeetingId" label="Reutilizar pauta de reunião anterior" options={previousMeetings} placeholder="Nenhuma" /> : null}
+      </fieldset>
       <div className="flex flex-wrap items-center gap-3 md:col-span-2">
         <SubmitButton>{isEdit ? "Salvar reunião" : "Criar reunião"}</SubmitButton>
         <Link href={cancelHref} className="btn btn-ghost">Cancelar</Link>

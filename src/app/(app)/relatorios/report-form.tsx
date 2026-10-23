@@ -78,6 +78,8 @@ export function ReportForm({
   const statusOptions = STATUS_OPTIONS[kind];
   const categoryOptions = categories[kind];
   const needsEmployee = kind === "desempenho";
+  const periodless = kind === "semanal" || kind === "mensal" || kind === "folha";
+  const pdfOnly = kind === "folha";
 
   return (
     <form onSubmit={submit} className="grid grid-cols-1 gap-6 md:grid-cols-2" noValidate>
@@ -101,18 +103,32 @@ export function ReportForm({
           <p className="mt-1.5 text-xs text-subtle">Em branco: semana atual. O PDF abre em uma nova aba, pronto para imprimir ou compartilhar.</p>
         </div>
       ) : null}
-      <div className={kind === "semanal" ? "hidden" : undefined}>
+      {kind === "mensal" ? (
+        <div className="md:col-span-2">
+          <label className="label" htmlFor="r-mes">Mês</label>
+          <input id="r-mes" type="month" name="mes" className="input max-w-xs" />
+          <p className="mt-1.5 text-xs text-subtle">Em branco: mês atual. Entram as semanas cuja sexta-feira cai no mês.</p>
+        </div>
+      ) : null}
+      {kind === "folha" ? (
+        <div className="md:col-span-2">
+          <label className="label" htmlFor="r-folha">Período da folha (escolha qualquer dia dele)</label>
+          <input id="r-folha" type="date" name="folha" className="input max-w-xs" />
+          <p className="mt-1.5 text-xs text-subtle">A folha vai do dia 20 ao dia 19 do mês seguinte. Em branco: período atual.</p>
+        </div>
+      ) : null}
+      <div className={periodless ? "hidden" : undefined}>
         <label className="label" htmlFor="r-de">{"Período — de"}</label>
-        <input id="r-de" type="date" name="de" className="input" />
+        <input id="r-de" type="date" name="de" className="input" disabled={periodless} />
       </div>
-      <div className={kind === "semanal" ? "hidden" : undefined}>
+      <div className={periodless ? "hidden" : undefined}>
         <label className="label" htmlFor="r-ate">{"Período — até"}</label>
-        <input id="r-ate" type="date" name="ate" className="input" />
+        <input id="r-ate" type="date" name="ate" className="input" disabled={periodless} />
         <p className="mt-1.5 text-xs text-subtle">Em branco: período padrão do relatório.</p>
       </div>
-      <div>
+      <div className={kind === "folha" ? "hidden" : undefined}>
         <label className="label" htmlFor="r-col">Colaborador{needsEmployee ? <span className="accent"> *</span> : null}</label>
-        <select id="r-col" name="colaborador" className="input" key={kind}>
+        <select id="r-col" name="colaborador" className="input" key={kind} disabled={kind === "folha"}>
           <option value="">{needsEmployee ? "Selecione…" : "Todos"}</option>
           {employees.map((e) => <option key={e.value} value={e.value}>{e.label}</option>)}
         </select>
@@ -128,7 +144,7 @@ export function ReportForm({
       ) : <div className="hidden md:block" />}
       {categoryOptions ? (
         <div>
-          <label className="label" htmlFor="r-cat">{kind === "metricas" || kind === "semanal" ? "Equipe" : kind === "frequencia" ? "Tipo de ocorrência" : "Tipo"}</label>
+          <label className="label" htmlFor="r-cat">{kind === "metricas" || kind === "semanal" || kind === "mensal" ? "Equipe" : kind === "frequencia" ? "Tipo de ocorrência" : "Tipo"}</label>
           <select id="r-cat" name="categoria" className="input" key={`c-${kind}`}>
             <option value="">Todos</option>
             {categoryOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -156,10 +172,12 @@ export function ReportForm({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-        <button type="submit" className="btn btn-primary" disabled={state.status === "loading"} onClick={(e) => setFormat(e.currentTarget, "xlsx")}>
-          {state.status === "loading" ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Download className="size-3.5" aria-hidden />} Excel (.xlsx)
-        </button>
-        <button type="submit" className="btn btn-secondary" disabled={state.status === "loading"} onClick={(e) => setFormat(e.currentTarget, "pdf")}>
+        {!pdfOnly ? (
+          <button type="submit" className="btn btn-primary" disabled={state.status === "loading"} onClick={(e) => setFormat(e.currentTarget, "xlsx")}>
+            {state.status === "loading" ? <LoaderCircle className="size-3.5 animate-spin" aria-hidden /> : <Download className="size-3.5" aria-hidden />} Excel (.xlsx)
+          </button>
+        ) : null}
+        <button type="submit" className={pdfOnly ? "btn btn-primary" : "btn btn-secondary"} disabled={state.status === "loading"} onClick={(e) => setFormat(e.currentTarget, "pdf")}>
           <Download className="size-3.5" aria-hidden /> PDF
         </button>
         <input type="hidden" name="formato" defaultValue="xlsx" data-format />

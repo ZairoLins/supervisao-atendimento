@@ -33,7 +33,7 @@ export default async function WeeklyMetricsPage(props: PageProps<"/desempenho/la
       <PageHeader
         eyebrow="Desempenho"
         title="Lançar métricas da semana"
-        description="Preencha os indicadores da semana de cada colaborador (por exemplo, toda sexta-feira). Linhas em branco são ignoradas; ao alterar um lançamento existente, o valor anterior fica guardado."
+        description="Preencha os indicadores da semana de cada colaborador (por exemplo, toda sexta-feira), incluindo quantas avaliações a nota representa. Linhas em branco são ignoradas; ao alterar um lançamento existente, o valor anterior fica guardado."
         actions={
           <>
             {can(actor, "reports:export") && filled > 0 ? (
@@ -83,7 +83,8 @@ export default async function WeeklyMetricsPage(props: PageProps<"/desempenho/la
                     <th>Colaborador</th>
                     <th className="w-32">Chamados</th>
                     <th className="w-36">Tempo médio (min)</th>
-                    <th className="w-32">Avaliação (0–10)</th>
+                    <th className="w-28">Nota (0–10)</th>
+                    <th className="w-28" title="Quantidade de avaliações recebidas na semana">Avaliações</th>
                     <th>Observação</th>
                   </tr>
                 </thead>
@@ -99,7 +100,8 @@ export default async function WeeklyMetricsPage(props: PageProps<"/desempenho/la
                       </td>
                       <td><BatchInput name={`t_${e.id}`} label={`Chamados de ${e.fullName}`} defaultValue={m?.ticketsHandled} step="1" min={0} /></td>
                       <td><BatchInput name={`a_${e.id}`} label={`Tempo médio de ${e.fullName}`} defaultValue={m ? Number(m.avgHandleMinutes) : null} step="0.01" min={0} /></td>
-                      <td><BatchInput name={`r_${e.id}`} label={`Avaliação de ${e.fullName}`} defaultValue={m ? Number(m.avgRating) : null} step="0.01" min={0} max={10} /></td>
+                      <td><BatchInput name={`r_${e.id}`} label={`Nota média de ${e.fullName}`} defaultValue={m && m.ratingCount !== 0 ? Number(m.avgRating) : null} step="0.01" min={0} max={10} /></td>
+                      <td><BatchInput name={`q_${e.id}`} label={`Quantidade de avaliações de ${e.fullName}`} defaultValue={m?.ratingCount} step="1" min={0} placeholder={m && m.ratingCount === null ? "?" : undefined} /></td>
                       <td className="min-w-48"><BatchInput name={`n_${e.id}`} label={`Observação de ${e.fullName}`} type="text" defaultValue={m?.notes} placeholder="Opcional" /></td>
                     </tr>
                   ))}
@@ -110,7 +112,9 @@ export default async function WeeklyMetricsPage(props: PageProps<"/desempenho/la
               <SubmitButton>Salvar lançamentos da semana</SubmitButton>
               <FormMessage />
             </div>
-            <p className="text-xs text-subtle">A semana entra no mês da sua sexta-feira ({formatDate(addDays(weekStart, 4))}).</p>
+            <p className="text-xs text-subtle">
+              A semana entra no mês da sua sexta-feira ({formatDate(addDays(weekStart, 4))}). A nota média do time é ponderada pela quantidade de avaliações: 10 com 2 avaliações pesa menos que 9,2 com 13. Sem avaliações na semana, informe 0 e deixe a nota em branco.
+            </p>
           </ActionForm>
         )}
       </Panel>

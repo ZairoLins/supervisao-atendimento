@@ -181,7 +181,7 @@ async function Performance({ actor, employeeId }: { actor: Actor; employeeId: st
                     <td><Link className="link" href={`/desempenho/${m.id}`}>{weekLabel(m.weekStart)}</Link></td>
                     <td className="text-right tabular-nums">{m.ticketsHandled.toLocaleString("pt-BR")}</td>
                     <td className="text-right tabular-nums">{Number(m.avgHandleMinutes).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                    <td className="text-right tabular-nums">{Number(m.avgRating).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                    <td className="text-right tabular-nums">{m.ratingCount === 0 ? "—" : Number(m.avgRating).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}{m.ratingCount !== null ? <span className="block text-[11px] text-subtle">{m.ratingCount} aval.</span> : null}</td>
                     <td className="text-xs text-subtle">{m._count.revisions ? `${m._count.revisions} correção(ões)` : "Original"}</td>
                   </tr>
                 ))}

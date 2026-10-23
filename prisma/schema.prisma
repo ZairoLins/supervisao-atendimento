@@ -320,6 +320,8 @@ model WeeklyMetric {
   ticketsHandled   Int
   avgHandleMinutes Decimal  @db.Decimal(8, 2)
   avgRating        Decimal  @db.Decimal(4, 2)
+  // Quantidade de avaliações recebidas na semana (nulo em lançamentos antigos)
+  ratingCount      Int?
   notes            String?
   // Contexto para comparações equivalentes (função/equipe na época do lançamento)
   jobTitleSnapshot String
@@ -341,6 +343,7 @@ model WeeklyMetricRevision {
   ticketsHandled   Int
   avgHandleMinutes Decimal  @db.Decimal(8, 2)
   avgRating        Decimal  @db.Decimal(4, 2)
+  ratingCount      Int?
   notes            String?
   reason           String
   changedById      String?  @db.Uuid
@@ -369,7 +372,8 @@ model MeetingTemplate {
   name            String      @unique
   type            MeetingType
   durationMinutes Int         @default(60)
-  agendaItems     String[]
+  // Pauta em Markdown
+  agenda          String      @default("")
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -404,6 +408,10 @@ model Meeting {
   startMinute Int
   endMinute   Int?
   location    String?
+  // Pauta planejada em Markdown (listas de tarefas "- [ ]" marcam itens discutidos)
+  agenda      String        @default("")
+  // Aviso automático enviado ao grupo (evita reenvio)
+  reminderSentAt DateTime?
   // Anotações realizadas durante a reunião (ata)
   minutes     String?
   seriesId    String?       @db.Uuid
@@ -413,28 +421,11 @@ model Meeting {
   updatedAt   DateTime      @updatedAt
 
   series       MeetingSeries?       @relation(fields: [seriesId], references: [id], onDelete: SetNull)
-  agendaItems  MeetingAgendaItem[]
   decisions    MeetingDecision[]
   participants MeetingParticipant[]
 
   @@unique([seriesId, date])
   @@index([date])
-  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
-}
-
-// Pauta planejada
-model MeetingAgendaItem {
-  id          String  @id @default(uuid(7)) @db.Uuid
-  meetingId   String  @db.Uuid
-  position    Int
-  title       String
-  description String?
-  discussed   Boolean @default(false)
-  searchText  String  @default("")
-
-  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
-
-  @@index([meetingId, position])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
@@ -528,4 +519,81 @@ model EmployeeNote {
 
   @@index([employeeId, date])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+// ─────────────────────────── Kanban da semana ───────────────────────────
+
+enum KanbanColumn {
+  TODO
+  DOING
+  DONE
+}
+
+enum KanbanPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+model KanbanCard {
+  id          String         @id @default(uuid(7)) @db.Uuid
+  title       String
+  description String?
+  column      KanbanColumn   @default(TODO)
+  priority    KanbanPriority @default(NORMAL)
+  position    Int
+  // Segunda-feira da semana do quadro
+  weekStart   DateTime       @db.Date
+  dueDate     DateTime?      @db.Date
+  completedAt DateTime?
+  createdById String?        @db.Uuid
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([weekStart, column, position])
+}
+
+// ─────────────────────────── WhatsApp ───────────────────────────
+
+// Configuração única (id = 1) dos destinatários e do aviso automático.
+model NotificationSettings {
+  id                  Int      @id @default(1)
+  managerName         String?
+  // Número no formato internacional, só dígitos (ex.: 5511999998888)
+  managerPhone        String?
+  groupName           String?
+  // JID do grupo (ex.: 120363000000000000@g.us)
+  groupJid            String?
+  reminderEnabled     Boolean  @default(false)
+  reminderHoursBefore Int      @default(2)
+  updatedById         String?  @db.Uuid
+  updatedAt           DateTime @updatedAt
+}
+
+enum MessageTarget {
+  MANAGER
+  GROUP
+}
+
+enum MessageStatus {
+  SENT
+  FAILED
+}
+
+// Histórico de mensagens enviadas (sem o conteúdo dos anexos).
+model OutboundMessage {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  kind        String
+  target      MessageTarget
+  destination String
+  summary     String
+  status      MessageStatus
+  error       String?
+  entityId    String?
+  automatic   Boolean       @default(false)
+  sentById    String?       @db.Uuid
+  createdAt   DateTime      @default(now())
+
+  @@index([createdAt])
+  @@index([kind, entityId])
 }

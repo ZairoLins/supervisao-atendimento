@@ -3,21 +3,23 @@ import ExcelJS from "exceljs";
 import { parseDateKey } from "@/lib/dates";
 import { AppError } from "@/lib/errors";
 import {
-  addAgendaItem,
   addDecision,
   createMeeting,
   createSeries,
   deleteMeeting,
   generateSeriesMeetings,
   getMeeting,
-  moveAgendaItem,
-  removeAgendaItem,
+  resetTasks,
+  saveAgenda,
+  templateFromMeeting,
+  toggleAgendaTask,
 } from "@/modules/meetings/service";
 import { createMetric } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback } from "@/modules/feedbacks/service";
-import { buildReport, buildWeeklyReport, reportParamsSchema } from "@/modules/reports/service";
-import { renderWeeklyExcel, renderWeeklyPdf } from "@/modules/reports/weekly";
+import { buildMetricsReport, buildOccurrencesReport, buildReport, reportParamsSchema } from "@/modules/reports/service";
+import { metricsReportFileName, renderMetricsExcel, renderMetricsPdf } from "@/modules/reports/metrics-report";
+import { occurrencesSummaryText, payrollPeriod, previousPayrollPeriod, renderOccurrencesPdf } from "@/modules/reports/occurrences-report";
 import { renderExcel, renderPdf, sanitizeCell } from "@/modules/reports/render";
 import { createUser, disconnect, hasTestDb, resetDb, testDb } from "../support/db";
 import { makeEmployee, occurrenceType } from "../support/factories";
@@ -28,26 +30,31 @@ describe.skipIf(!hasTestDb)("reuniões", () => {
   beforeEach(resetDb);
   afterAll(disconnect);
 
-  it("pauta ordenável e separada de anotações e decisões", async () => {
+  it("pauta em Markdown: checklist marcado como discutido e separado das anotações", async () => {
     const sup = await createUser();
-    const m = await createMeeting(testDb(), sup, { title: "Semanal", type: "WEEKLY", date: "2026-10-26", startTime: "09:00", agenda: "A\nB\nC" });
-    const full = await getMeeting(testDb(), sup, m.id);
-    expect(full.agendaItems.map((i) => i.title)).toEqual(["A", "B", "C"]);
-    await moveAgendaItem(testDb(), sup, full.agendaItems[2].id, "up");
-    await moveAgendaItem(testDb(), sup, full.agendaItems[0].id, "down");
+    const agenda = "## Abertura\n- [ ] Recados\n- [ ] **Indicadores**\n\nTexto livre";
+    const m = await createMeeting(testDb(), sup, { title: "Semanal", type: "WEEKLY", date: "2026-10-26", startTime: "09:00", agenda: agenda.replace(/\n/g, "\r\n") + "\r\n\n" });
+    expect((await getMeeting(testDb(), sup, m.id)).agenda).toBe(agenda);
+    await toggleAgendaTask(testDb(), sup, m.id, 3);
+    expect((await getMeeting(testDb(), sup, m.id)).agenda).toBe("## Abertura\n- [ ] Recados\n- [x] **Indicadores**\n\nTexto livre");
+    await expect(toggleAgendaTask(testDb(), sup, m.id, 1)).rejects.toBeInstanceOf(AppError);
+    await saveAgenda(testDb(), sup, m.id, { agenda: "- [ ] Novo item" });
     const after = await getMeeting(testDb(), sup, m.id);
-    expect(after.agendaItems.map((i) => i.title)).toEqual(["C", "A", "B"]);
-    await addAgendaItem(testDb(), sup, m.id, { title: "D" });
-    await removeAgendaItem(testDb(), sup, after.agendaItems[0].id);
-    const final = await getMeeting(testDb(), sup, m.id);
-    expect(final.agendaItems.map((i) => [i.title, i.position])).toEqual([["A", 0], ["B", 1], ["D", 2]]);
+    expect(after.agenda).toBe("- [ ] Novo item");
+    expect(after.minutes).toBeNull();
+    expect(after.searchText).toContain("novo item");
   });
 
-  it("reutiliza pauta de reunião anterior", async () => {
+  it("reutiliza pauta de reunião anterior e de modelo, desmarcando o que foi discutido", async () => {
     const sup = await createUser();
-    const m1 = await createMeeting(testDb(), sup, { title: "Original", type: "WEEKLY", date: "2026-10-19", startTime: "09:00", agenda: "Item 1\nItem 2" });
+    const m1 = await createMeeting(testDb(), sup, { title: "Original", type: "WEEKLY", date: "2026-10-19", startTime: "09:00", agenda: "- [x] Item 1\n- [ ] Item 2" });
     const m2 = await createMeeting(testDb(), sup, { title: "Cópia", type: "WEEKLY", date: "2026-10-26", startTime: "09:00", copyFromMeetingId: m1.id });
-    expect((await getMeeting(testDb(), sup, m2.id)).agendaItems.map((i) => i.title)).toEqual(["Item 1", "Item 2"]);
+    expect((await getMeeting(testDb(), sup, m2.id)).agenda).toBe("- [ ] Item 1\n- [ ] Item 2");
+    const t = await templateFromMeeting(testDb(), sup, m1.id, { name: "Semanal padrão" });
+    expect(t.agenda).toBe("- [ ] Item 1\n- [ ] Item 2");
+    const m3 = await createMeeting(testDb(), sup, { title: "Do modelo", type: "WEEKLY", date: "2026-11-02", startTime: "09:00", templateId: t.id });
+    expect((await getMeeting(testDb(), sup, m3.id)).agenda).toBe("- [ ] Item 1\n- [ ] Item 2");
+    expect(resetTasks("1. [X] a\n  - [x] b")).toBe("1. [ ] a\n  - [ ] b");
   });
 
   it("registra decisões e participantes; exclusão é lógica", async () => {
@@ -102,9 +109,9 @@ describe.skipIf(!hasTestDb)("relatórios", () => {
   it("gera Excel válido com dados reais, filtros, totais e células protegidas", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup, { fullName: "=cmd|' /C calc'!A0" });
-    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-10", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9", notes: "+SUM(1,2)" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-10", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9", ratingCount: "100", notes: "+SUM(1,2)" }, TODAY);
     const other = await makeEmployee(sup);
-    await createMetric(testDb(), sup, { employeeId: other.id, week: "2026-09-11", ticketsHandled: "300", avgHandleMinutes: "7", avgRating: "7" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: other.id, week: "2026-09-11", ticketsHandled: "300", avgHandleMinutes: "7", avgRating: "7", ratingCount: "300" }, TODAY);
     const report = await buildReport(testDb(), sup, params({ tipo: "metricas", de: "2026-09-01", ate: "2026-09-30" }), TODAY);
     expect(report.rows).toHaveLength(2);
     expect(report.totals?.tickets).toBe(400);
@@ -128,24 +135,54 @@ describe.skipIf(!hasTestDb)("relatórios", () => {
   it("relatório semanal: PDF com design próprio e Excel formatado, inclusive semana vazia", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup, { fullName: "=Ana" });
-    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-12", ticketsHandled: "90", avgHandleMinutes: "5", avgRating: "8" }, TODAY);
-    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-19", ticketsHandled: "120", avgHandleMinutes: "4.5", avgRating: "9.1", notes: "Campanha" }, TODAY);
-    const weekly = await buildWeeklyReport(testDb(), sup, params({ tipo: "semanal", formato: "pdf", semana: "2026-10-21" }), TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-12", ticketsHandled: "90", avgHandleMinutes: "5", avgRating: "8", ratingCount: "90" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-19", ticketsHandled: "120", avgHandleMinutes: "4.5", avgRating: "9.1", ratingCount: "120", notes: "Campanha" }, TODAY);
+    const weekly = await buildMetricsReport(testDb(), sup, params({ tipo: "semanal", formato: "pdf", semana: "2026-10-21" }), TODAY);
     expect(weekly.rows).toHaveLength(1);
     expect(weekly.rows[0].prev?.tickets).toBe(90);
-    const pdf = await renderWeeklyPdf(weekly, "America/Sao_Paulo");
+    const pdf = await renderMetricsPdf(weekly, "America/Sao_Paulo");
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
-    const xlsx = await renderWeeklyExcel(weekly, "America/Sao_Paulo");
+    const xlsx = await renderMetricsExcel(weekly, "America/Sao_Paulo");
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(xlsx as unknown as ArrayBuffer);
     const values: unknown[] = [];
     wb.worksheets[0].eachRow((row) => row.eachCell((c) => values.push(c.value)));
     expect(values).toContain("'=Ana");
     expect(values).toContain(120);
-    const empty = await buildWeeklyReport(testDb(), sup, params({ tipo: "semanal", formato: "pdf", semana: "2026-09-01" }), TODAY);
+    const empty = await buildMetricsReport(testDb(), sup, params({ tipo: "semanal", formato: "pdf", semana: "2026-09-01" }), TODAY);
     expect(empty.rows).toHaveLength(0);
-    expect((await renderWeeklyPdf(empty, "America/Sao_Paulo")).subarray(0, 5).toString()).toBe("%PDF-");
+    expect((await renderMetricsPdf(empty, "America/Sao_Paulo")).subarray(0, 5).toString()).toBe("%PDF-");
     expect(await testDb().auditLog.count({ where: { action: "EXPORT", entityId: "semanal" } })).toBe(2);
+
+    const monthly = await buildMetricsReport(testDb(), sup, params({ tipo: "mensal", formato: "pdf", mes: "2026-10" }), TODAY);
+    expect(monthly.rows[0]).toMatchObject({ tickets: 210, weeks: 2 });
+    expect(metricsReportFileName(monthly, "pdf")).toBe("relatorio-mensal-2026-10.pdf");
+    expect((await renderMetricsPdf(monthly, "America/Sao_Paulo")).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(() => params({ tipo: "mensal", formato: "pdf", mes: "2026-13" })).toThrow();
+  });
+
+  it("ocorrências da folha: período do dia 20 ao 19, sem observações", async () => {
+    expect(payrollPeriod(parseDateKey("2026-10-19"))).toEqual({ from: parseDateKey("2026-09-20"), to: parseDateKey("2026-10-19") });
+    expect(payrollPeriod(parseDateKey("2026-10-20"))).toEqual({ from: parseDateKey("2026-10-20"), to: parseDateKey("2026-11-19") });
+    expect(payrollPeriod(parseDateKey("2026-01-05"))).toEqual({ from: parseDateKey("2025-12-20"), to: parseDateKey("2026-01-19") });
+    expect(previousPayrollPeriod(parseDateKey("2026-10-22"))).toEqual({ from: parseDateKey("2026-09-20"), to: parseDateKey("2026-10-19") });
+
+    const sup = await createUser();
+    const e = await makeEmployee(sup, { fullName: "Dora Lima" });
+    const atestado = await occurrenceType("ATESTADO");
+    const falta = await occurrenceType("FALTA");
+    await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: falta.id, date: "2026-09-19" });
+    await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: atestado.id, date: "2026-09-21", adminNotes: "Trânsito na ponte" });
+    await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: falta.id, date: "2026-10-19", restrictedNotes: "sigilo" });
+    const r = await buildOccurrencesReport(testDb(), sup, params({ tipo: "folha", formato: "pdf", folha: "2026-10-01" }), TODAY);
+    expect(r.total).toBe(2);
+    expect(r.employees[0]).toMatchObject({ name: "Dora Lima", count: 2 });
+    expect(JSON.stringify(r)).not.toMatch(/Trânsito|sigilo/);
+    const text = occurrencesSummaryText(r);
+    expect(text).toContain("Folha de 20/09/2026 a 19/10/2026");
+    expect(text).toContain("Dora Lima");
+    expect((await renderOccurrencesPdf(r, "America/Sao_Paulo")).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(await testDb().auditLog.count({ where: { action: "EXPORT", entityId: "folha" } })).toBe(1);
   });
 
   it("gera PDF válido, inclusive sem registros", async () => {

@@ -1,0 +1,15 @@
+# /etc/systemd/system/supervisao-avisos.service
+[Unit]
+Description=Aviso automático de reuniões no WhatsApp — Supervisão de Atendimento
+After=network-online.target supervisao.service
+
+[Service]
+Type=oneshot
+User=supervisao
+Group=supervisao
+EnvironmentFile=/etc/supervisao/supervisao.env
+WorkingDirectory=/opt/supervisao/app
+ExecStart=/opt/supervisao/node/bin/node node_modules/tsx/dist/cli.mjs scripts/send-reminders.ts
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

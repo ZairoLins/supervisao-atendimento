@@ -6,12 +6,14 @@ import { audit } from "@/lib/audit";
 import { addDays, dayNumber, formatDate, parseTime, weekday } from "@/lib/dates";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { assertCan, type Actor } from "@/lib/permissions";
+import { markdownToPlain, toggleTaskAtLine } from "@/lib/markdown";
 import { buildSearchText, formatCode, normalizeQuery } from "@/lib/text";
 import { dateField, intField, optionalDateField, optionalText, optionalTimeField, optionalUuid, PAGE_SIZE, requiredText, timeField } from "@/lib/validation";
 
-const agendaLines = z.preprocess(
-  (v) => (typeof v === "string" ? v.split(/\r?\n/).map((l) => l.trim()).filter(Boolean) : v),
-  z.array(z.string().max(300, "Cada item da pauta deve ter até 300 caracteres.")).max(50, "Máximo de 50 itens.").default([]),
+/** Pauta em Markdown. Itens "- [ ]" podem ser marcados como discutidos na reunião. */
+const agendaMarkdown = z.preprocess(
+  (v) => (typeof v === "string" ? v.replace(/\r\n/g, "\n").replace(/\s+$/, "") : v),
+  z.string().max(20_000, "A pauta deve ter até 20.000 caracteres.").default(""),
 );
 
 const meetingSchema = z.object({
@@ -22,7 +24,7 @@ const meetingSchema = z.object({
   endTime: optionalTimeField(),
   location: optionalText(160),
   participantIds: z.array(z.string().uuid()).default([]),
-  agenda: agendaLines,
+  agenda: agendaMarkdown,
   copyFromMeetingId: optionalUuid(),
   templateId: optionalUuid(),
 });
@@ -35,24 +37,29 @@ function meetingTimes(start: string, end?: string) {
 }
 
 async function reindexMeeting(tx: Tx, meetingId: string) {
-  const m = await tx.meeting.findUniqueOrThrow({ where: { id: meetingId }, include: { agendaItems: { select: { title: true } } } });
+  const m = await tx.meeting.findUniqueOrThrow({ where: { id: meetingId } });
   await tx.meeting.update({
     where: { id: meetingId },
-    data: { searchText: buildSearchText(formatCode("meeting", m.code), m.title, m.location, m.agendaItems.map((a) => a.title).join(" "), m.minutes?.slice(0, 2000)) },
+    data: { searchText: buildSearchText(formatCode("meeting", m.code), m.title, m.location, markdownToPlain(m.agenda).slice(0, 4000), m.minutes?.slice(0, 2000)) },
   });
 }
 
-async function agendaSource(tx: Tx, v: { agenda: string[]; copyFromMeetingId?: string; templateId?: string }) {
-  if (v.agenda.length) return v.agenda.map((title) => ({ title, description: null as string | null }));
+/** Desmarca os itens já discutidos ao reutilizar uma pauta. */
+export function resetTasks(md: string): string {
+  return md.replace(/^(\s*(?:[-*+]|\d+[.)])\s+)\[[xX]\]/gm, "$1[ ]");
+}
+
+async function agendaSource(tx: Tx, v: { agenda: string; copyFromMeetingId?: string; templateId?: string }) {
+  if (v.agenda.trim()) return v.agenda;
   if (v.copyFromMeetingId) {
-    const items = await tx.meetingAgendaItem.findMany({ where: { meetingId: v.copyFromMeetingId }, orderBy: { position: "asc" } });
-    return items.map((i) => ({ title: i.title, description: i.description }));
+    const m = await tx.meeting.findUnique({ where: { id: v.copyFromMeetingId }, select: { agenda: true } });
+    return resetTasks(m?.agenda ?? "");
   }
   if (v.templateId) {
     const t = await tx.meetingTemplate.findUnique({ where: { id: v.templateId } });
-    return (t?.agendaItems ?? []).map((title) => ({ title, description: null }));
+    return t?.agenda ?? "";
   }
-  return [];
+  return "";
 }
 
 export async function createMeeting(db: Db, actor: Actor, raw: unknown) {
@@ -69,8 +76,8 @@ export async function createMeeting(db: Db, actor: Actor, raw: unknown) {
         startMinute,
         endMinute,
         location: v.location ?? null,
+        agenda,
         participants: { create: [...new Set(v.participantIds)].map((employeeId) => ({ employeeId })) },
-        agendaItems: { create: agenda.map((a, i) => ({ position: i, title: a.title, description: a.description, searchText: buildSearchText(a.title, a.description) })) },
       },
     });
     await reindexMeeting(tx, meeting.id);
@@ -79,7 +86,7 @@ export async function createMeeting(db: Db, actor: Actor, raw: unknown) {
   });
 }
 
-const meetingUpdateSchema = meetingSchema.omit({ agenda: true, copyFromMeetingId: true, templateId: true }).extend({
+const meetingUpdateSchema = meetingSchema.omit({ copyFromMeetingId: true, templateId: true }).extend({
   status: z.enum(["SCHEDULED", "DONE", "CANCELED"]),
 });
 
@@ -96,7 +103,18 @@ export async function updateMeeting(db: Db, actor: Actor, id: string, raw: unkno
     }
     const after = await tx.meeting.update({
       where: { id },
-      data: { title: v.title, type: v.type, status: v.status, date: v.date, startMinute, endMinute, location: v.location ?? null },
+      data: {
+        title: v.title,
+        type: v.type,
+        status: v.status,
+        date: v.date,
+        startMinute,
+        endMinute,
+        location: v.location ?? null,
+        agenda: v.agenda,
+        // Nova data/horário: o aviso automático volta a valer
+        ...(dayNumber(v.date) !== dayNumber(before.date) || startMinute !== before.startMinute ? { reminderSentAt: null } : {}),
+      },
     });
     await reindexMeeting(tx, id);
     await audit(tx, { actorId: actor.id, action: "UPDATE", entityType: "Meeting", entityId: id, summary: `Reunião ${formatCode("meeting", after.code)} atualizada`, before, after });
@@ -133,67 +151,28 @@ export async function deleteMeeting(db: Db, actor: Actor, id: string) {
 
 // ───────────── Pauta ─────────────
 
-export async function addAgendaItem(db: Db, actor: Actor, meetingId: string, raw: unknown) {
+/** Salva só a pauta (editor da página da reunião). */
+export async function saveAgenda(db: Db, actor: Actor, meetingId: string, raw: unknown) {
   assertCan(actor, "meetings:write");
-  const v = z.object({ title: requiredText("o item da pauta", 300), description: optionalText(2000) }).parse(raw);
+  const v = z.object({ agenda: agendaMarkdown }).parse(raw);
   return db.$transaction(async (tx) => {
-    const m = await tx.meeting.findUnique({ where: { id: meetingId } });
-    if (!m || m.deletedAt) throw new NotFoundError("Reunião não encontrada.");
-    const last = await tx.meetingAgendaItem.findFirst({ where: { meetingId }, orderBy: { position: "desc" } });
-    const item = await tx.meetingAgendaItem.create({
-      data: { meetingId, position: (last?.position ?? -1) + 1, title: v.title, description: v.description ?? null, searchText: buildSearchText(v.title, v.description) },
-    });
+    const before = await tx.meeting.findUnique({ where: { id: meetingId } });
+    if (!before || before.deletedAt) throw new NotFoundError("Reunião não encontrada.");
+    const after = await tx.meeting.update({ where: { id: meetingId }, data: { agenda: v.agenda } });
     await reindexMeeting(tx, meetingId);
-    return item;
+    await audit(tx, { actorId: actor.id, action: "UPDATE_AGENDA", entityType: "Meeting", entityId: meetingId, summary: `Pauta da reunião ${formatCode("meeting", after.code)} atualizada` });
+    return after;
   });
 }
 
-export async function updateAgendaItem(db: Db, actor: Actor, itemId: string, raw: unknown) {
+/** Marca/desmarca como discutido o item de checklist na linha informada da pauta. */
+export async function toggleAgendaTask(db: Db, actor: Actor, meetingId: string, line: number) {
   assertCan(actor, "meetings:write");
-  const v = z.object({ title: requiredText("o item da pauta", 300), description: optionalText(2000), discussed: z.preprocess((x) => x === "on", z.boolean()) }).parse(raw);
-  return db.$transaction(async (tx) => {
-    const item = await tx.meetingAgendaItem.update({
-      where: { id: itemId },
-      data: { title: v.title, description: v.description ?? null, discussed: v.discussed, searchText: buildSearchText(v.title, v.description) },
-    });
-    await reindexMeeting(tx, item.meetingId);
-    return item;
-  });
-}
-
-export async function toggleAgendaDiscussed(db: Db, actor: Actor, itemId: string) {
-  assertCan(actor, "meetings:write");
-  const item = await db.meetingAgendaItem.findUnique({ where: { id: itemId } });
-  if (!item) throw new NotFoundError("Item não encontrado.");
-  return db.meetingAgendaItem.update({ where: { id: itemId }, data: { discussed: !item.discussed } });
-}
-
-/** Reordena a pauta trocando a posição com o item vizinho. */
-export async function moveAgendaItem(db: Db, actor: Actor, itemId: string, direction: "up" | "down") {
-  assertCan(actor, "meetings:write");
-  return db.$transaction(async (tx) => {
-    const item = await tx.meetingAgendaItem.findUnique({ where: { id: itemId } });
-    if (!item) throw new NotFoundError("Item não encontrado.");
-    const items = await tx.meetingAgendaItem.findMany({ where: { meetingId: item.meetingId }, orderBy: { position: "asc" } });
-    const idx = items.findIndex((i) => i.id === itemId);
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= items.length) return;
-    const reordered = [...items];
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-    // Renumeração em duas etapas evita conflito temporário de posições
-    for (let i = 0; i < reordered.length; i++) await tx.meetingAgendaItem.update({ where: { id: reordered[i].id }, data: { position: 1000 + i } });
-    for (let i = 0; i < reordered.length; i++) await tx.meetingAgendaItem.update({ where: { id: reordered[i].id }, data: { position: i } });
-  });
-}
-
-export async function removeAgendaItem(db: Db, actor: Actor, itemId: string) {
-  assertCan(actor, "meetings:write");
-  return db.$transaction(async (tx) => {
-    const item = await tx.meetingAgendaItem.delete({ where: { id: itemId } });
-    const rest = await tx.meetingAgendaItem.findMany({ where: { meetingId: item.meetingId }, orderBy: { position: "asc" } });
-    for (let i = 0; i < rest.length; i++) if (rest[i].position !== i) await tx.meetingAgendaItem.update({ where: { id: rest[i].id }, data: { position: i } });
-    await reindexMeeting(tx, item.meetingId);
-  });
+  const m = await db.meeting.findUnique({ where: { id: meetingId } });
+  if (!m || m.deletedAt) throw new NotFoundError("Reunião não encontrada.");
+  const next = toggleTaskAtLine(m.agenda, line);
+  if (next === null) throw new ValidationError("Item da pauta não encontrado. Recarregue a página.");
+  return db.meeting.update({ where: { id: meetingId }, data: { agenda: next } });
 }
 
 // ───────────── Decisões e encaminhamentos ─────────────
@@ -237,7 +216,6 @@ export async function getMeeting(db: Db, actor: Actor, id: string) {
   const m = await db.meeting.findUnique({
     where: { id },
     include: {
-      agendaItems: { orderBy: { position: "asc" } },
       decisions: { orderBy: { position: "asc" } },
       participants: { include: { employee: { select: { id: true, fullName: true, code: true, status: true } } }, orderBy: { employee: { fullName: "asc" } } },
       series: true,
@@ -262,14 +240,14 @@ export async function listMeetings(db: Db, actor: Actor, f: MeetingFilters, toda
   if (f.when === "past") dateFilter.lt = today;
   if (Object.keys(dateFilter).length) where.date = dateFilter;
   const q = normalizeQuery(f.q);
-  if (q) where.OR = [{ searchText: { contains: q } }, { agendaItems: { some: { searchText: { contains: q } } } }];
+  if (q) where.searchText = { contains: q };
   const page = f.page ?? 1;
   const asc = f.when === "upcoming";
   const [total, items] = await Promise.all([
     db.meeting.count({ where }),
     db.meeting.findMany({
       where,
-      include: { _count: { select: { agendaItems: true, participants: true, decisions: true } } },
+      include: { _count: { select: { participants: true, decisions: true } } },
       orderBy: [{ date: asc ? "asc" : "desc" }, { startMinute: asc ? "asc" : "desc" }],
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
@@ -290,7 +268,7 @@ const templateSchema = z.object({
   name: requiredText("o nome do modelo", 120),
   type: z.enum(["WEEKLY", "EXTRAORDINARY"]),
   durationMinutes: intField("a duração", 5, 600),
-  agenda: agendaLines,
+  agenda: agendaMarkdown,
 });
 
 export async function createTemplate(db: Db, actor: Actor, raw: unknown) {
@@ -298,7 +276,7 @@ export async function createTemplate(db: Db, actor: Actor, raw: unknown) {
   const v = templateSchema.parse(raw);
   const exists = await db.meetingTemplate.findUnique({ where: { name: v.name } });
   if (exists) throw new ValidationError("Já existe um modelo com este nome.", { name: "Nome já utilizado." });
-  return db.meetingTemplate.create({ data: { name: v.name, type: v.type, durationMinutes: v.durationMinutes, agendaItems: v.agenda } });
+  return db.meetingTemplate.create({ data: { name: v.name, type: v.type, durationMinutes: v.durationMinutes, agenda: v.agenda } });
 }
 
 /** Salva a pauta de uma reunião como modelo reutilizável. */
@@ -309,7 +287,7 @@ export async function templateFromMeeting(db: Db, actor: Actor, meetingId: strin
   const exists = await db.meetingTemplate.findUnique({ where: { name } });
   if (exists) throw new ValidationError("Já existe um modelo com este nome.", { name: "Nome já utilizado." });
   return db.meetingTemplate.create({
-    data: { name, type: m.type, durationMinutes: m.endMinute ? m.endMinute - m.startMinute : 60, agendaItems: m.agendaItems.map((a) => a.title) },
+    data: { name, type: m.type, durationMinutes: m.endMinute ? m.endMinute - m.startMinute : 60, agenda: resetTasks(m.agenda) },
   });
 }
 
@@ -373,8 +351,8 @@ export async function generateSeriesMeetings(db: Db, actor: Actor, seriesId: str
           startMinute: series.startMinute,
           endMinute: series.endMinute,
           seriesId,
+          agenda: series.template?.agenda ?? "",
           participants: { create: participants.map((employeeId) => ({ employeeId })) },
-          agendaItems: { create: (series.template?.agendaItems ?? []).map((title, idx) => ({ position: idx, title, searchText: buildSearchText(title) })) },
         },
       });
       await reindexMeeting(tx, m.id);

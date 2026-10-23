@@ -1,25 +1,32 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Check, Pencil, Trash2, Undo2 } from "lucide-react";
+import { Check, Megaphone, Pencil, Send, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
 import { assertUuid, orNotFound } from "@/lib/page";
-import { formatDate, formatTime } from "@/lib/dates";
+import { formatDate, formatDateTime, formatTime } from "@/lib/dates";
+import { env } from "@/lib/env";
 import { MEETING_STATUS, MEETING_TYPE } from "@/lib/labels";
 import { formatCode } from "@/lib/text";
 import { readParams } from "@/lib/validation";
 import { getMeeting } from "@/modules/meetings/service";
 import {
-  addAgendaItemAction,
   addDecisionAction,
-  agendaCommandAction,
   deleteMeetingAction,
   removeDecisionAction,
+  saveAgendaAction,
   saveMinutesAction,
   setAttendanceAction,
   templateFromMeetingAction,
+  toggleAgendaTaskAction,
 } from "@/modules/meetings/actions";
+import { agendaStats } from "@/lib/markdown";
+import { lastMessagesFor } from "@/modules/whatsapp/service";
+import { sendMeetingAgendaAction, sendMeetingReminderAction } from "@/modules/whatsapp/actions";
+import { Markdown } from "@/components/ui/markdown";
+import { MarkdownField } from "@/components/ui/markdown-field";
+import { AGENDA_HINT } from "../meeting-form";
 import { ActionForm, CheckboxField, CheckboxGroup, FormMessage, Hidden, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
 import { Badge, LabelBadge, Notice, PageHeader, Panel } from "@/components/ui/primitives";
 
@@ -31,6 +38,10 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
   const params = readParams(await props.searchParams);
   const m = await orNotFound(getMeeting(db, actor, id));
   const canWrite = can(actor, "meetings:write");
+  const stats = agendaStats(m.agenda);
+  const canSend = can(actor, "messages:send");
+  const sent = canSend ? await lastMessagesFor(db, m.id) : [];
+  const tz = env().APP_TIMEZONE;
 
   return (
     <>
@@ -53,46 +64,47 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
         <div className="flex flex-col gap-5">
           {/* 1. Pauta planejada */}
           <section id="pauta" className="scroll-mt-24">
-            <Panel title="1 · Pauta planejada" description="O que se planejou discutir.">
-              {m.agendaItems.length === 0 ? <p className="mb-4 text-sm text-muted">Pauta vazia.</p> : (
-                <ol className="mb-5 flex flex-col">
-                  {m.agendaItems.map((item, idx) => (
-                    <li key={item.id} className="flex items-start gap-3 border-b border-line py-3 first:pt-0 last:border-0">
-                      <span className="w-6 shrink-0 pt-0.5 text-xs tabular-nums text-subtle">{idx + 1}.</span>
-                      <div className="min-w-0 flex-1">
-                        <p className={item.discussed ? "text-muted line-through decoration-line-strong" : ""}>{item.title}</p>
-                        {item.description ? <p className="mt-0.5 text-xs text-subtle">{item.description}</p> : null}
-                        {item.discussed ? <span className="mt-1 inline-block"><Badge tone="ok">Discutido</Badge></span> : null}
-                      </div>
-                      {canWrite ? (
-                        <div className="flex shrink-0 gap-0.5">
-                          {[
-                            { cmd: "up", label: "Mover para cima", icon: ArrowUp, hide: idx === 0 },
-                            { cmd: "down", label: "Mover para baixo", icon: ArrowDown, hide: idx === m.agendaItems.length - 1 },
-                            { cmd: "toggle", label: item.discussed ? "Marcar como não discutido" : "Marcar como discutido", icon: item.discussed ? Undo2 : Check, hide: false },
-                            { cmd: "remove", label: "Remover item", icon: Trash2, hide: false },
-                          ]
-                            .filter((b) => !b.hide)
-                            .map((b) => (
-                              <ActionForm key={b.cmd} action={agendaCommandAction.bind(null, item.id, id)}>
-                                <Hidden name="cmd" value={b.cmd} />
-                                <button type="submit" className="btn btn-ghost btn-sm px-2" aria-label={b.label} title={b.label}>
-                                  <b.icon className="size-3.5" aria-hidden />
-                                </button>
-                              </ActionForm>
-                            ))}
-                        </div>
-                      ) : null}
-                    </li>
-                  ))}
-                </ol>
+            <Panel
+              title="1 · Pauta planejada"
+              description={stats.items ? `O que se planejou discutir · ${stats.done} de ${stats.items} item(ns) discutido(s).` : "O que se planejou discutir."}
+            >
+              {m.agenda.trim() ? (
+                <Markdown
+                  className="mb-5"
+                  renderTask={
+                    canWrite
+                      ? (line, checked) => (
+                          <ActionForm action={toggleAgendaTaskAction.bind(null, id)}>
+                            <Hidden name="line" value={line} />
+                            <button
+                              type="submit"
+                              className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border ${checked ? "border-primary bg-primary text-white" : "border-line-strong bg-surface hover:border-primary"}`}
+                              aria-label={checked ? "Marcar como não discutido" : "Marcar como discutido"}
+                              title={checked ? "Marcar como não discutido" : "Marcar como discutido"}
+                            >
+                              {checked ? <Check className="size-3.5" aria-hidden /> : null}
+                            </button>
+                          </ActionForm>
+                        )
+                      : undefined
+                  }
+                >
+                  {m.agenda}
+                </Markdown>
+              ) : (
+                <p className="mb-4 text-sm text-muted">Pauta vazia.</p>
               )}
               {canWrite ? (
-                <ActionForm action={addAgendaItemAction.bind(null, id)} resetOnSuccess className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <TextField name="title" label="Novo item da pauta" required maxLength={300} />
-                  <SubmitButton variant="secondary" className="btn-sm">Adicionar</SubmitButton>
-                  <div className="sm:col-span-2"><FormMessage /></div>
-                </ActionForm>
+                <details className="group border-t border-line pt-4" open={!m.agenda.trim()}>
+                  <summary className="btn btn-secondary btn-sm cursor-pointer list-none">
+                    <Pencil className="size-3.5" aria-hidden /> {m.agenda.trim() ? "Editar pauta" : "Escrever pauta"}
+                  </summary>
+                  {/* key: remonta o editor quando a pauta muda (ex.: item marcado como discutido) */}
+                  <ActionForm key={m.agenda} action={saveAgendaAction.bind(null, id)} className="mt-4 flex flex-col gap-4">
+                    <MarkdownField name="agenda" label="Pauta (Markdown)" rows={12} maxLength={20000} defaultValue={m.agenda} hint={AGENDA_HINT} />
+                    <div className="flex flex-wrap items-center gap-3"><SubmitButton>Salvar pauta</SubmitButton><FormMessage /></div>
+                  </ActionForm>
+                </details>
               ) : null}
             </Panel>
           </section>
@@ -158,6 +170,34 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
               </ul>
             )}
           </Panel>
+          {canSend ? (
+            <Panel title="Enviar pelo WhatsApp" description="A pauta vai formatada (negrito, listas e checklist).">
+              <div className="flex flex-col gap-4">
+                <ActionForm action={sendMeetingAgendaAction.bind(null, id)} className="flex flex-col gap-2">
+                  <SubmitButton variant="secondary" className="btn-sm self-start" confirm="Enviar a pauta desta reunião ao gestor?"><Send className="size-3.5" aria-hidden /> Enviar pauta ao gestor</SubmitButton>
+                  <FormMessage />
+                </ActionForm>
+                <ActionForm action={sendMeetingReminderAction.bind(null, id)} className="flex flex-col gap-2">
+                  <SubmitButton variant="secondary" className="btn-sm self-start" confirm={m.reminderSentAt ? "O aviso já foi enviado. Enviar de novo ao grupo?" : "Enviar o aviso desta reunião ao grupo?"}>
+                    <Megaphone className="size-3.5" aria-hidden /> Avisar o grupo
+                  </SubmitButton>
+                  <p className="text-xs text-subtle">
+                    {m.reminderSentAt ? `Aviso enviado em ${formatDateTime(m.reminderSentAt, tz)}.` : m.type === "WEEKLY" ? "Reunião semanal: o aviso automático é enviado se estiver ativado em WhatsApp." : "Aviso ainda não enviado."}
+                  </p>
+                  <FormMessage />
+                </ActionForm>
+                {sent.length ? (
+                  <ul className="flex flex-col gap-1 border-t border-line pt-3 text-xs text-subtle">
+                    {sent.map((s) => (
+                      <li key={s.id}>
+                        {formatDateTime(s.createdAt, tz)} · {s.kind === "MEETING_AGENDA" ? "pauta ao gestor" : "aviso ao grupo"} · {s.status === "SENT" ? "enviado" : <span className="text-danger">falhou</span>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
           {canWrite ? (
             <Panel title="Reutilizar pauta" description="Salve a pauta atual como modelo para próximas reuniões.">
               <ActionForm action={templateFromMeetingAction.bind(null, id)} resetOnSuccess className="flex flex-col gap-4">
@@ -170,7 +210,7 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
           {canWrite ? (
             <Panel title="Excluir reunião">
               <ActionForm action={deleteMeetingAction.bind(null, id)} className="flex flex-col gap-3">
-                <p className="text-xs text-subtle">Exclusão lógica: tarefas vinculadas são mantidas.</p>
+                <p className="text-xs text-subtle">Exclusão lógica: o registro fica guardado na auditoria.</p>
                 <SubmitButton variant="danger" className="btn-sm self-start" confirm="Excluir esta reunião?">Excluir</SubmitButton>
                 <FormMessage />
               </ActionForm>

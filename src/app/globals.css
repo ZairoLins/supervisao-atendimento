@@ -181,6 +181,85 @@ body {
   mark.hl {
     @apply rounded-[3px] bg-primary/15 px-0.5 text-ink;
   }
+
+  /* Markdown (pauta) */
+  .md {
+    @apply text-sm leading-relaxed text-ink;
+  }
+  .md > * + * {
+    @apply mt-3;
+  }
+  .md h1 {
+    @apply text-lg font-semibold tracking-tight;
+  }
+  .md h2 {
+    @apply text-base font-semibold tracking-tight;
+  }
+  .md h3,
+  .md h4,
+  .md h5,
+  .md h6 {
+    @apply text-sm font-semibold;
+  }
+  .md ul {
+    @apply list-disc pl-5;
+  }
+  .md ol {
+    @apply list-decimal pl-5;
+  }
+  .md li + li {
+    @apply mt-1;
+  }
+  .md li > ul,
+  .md li > ol {
+    @apply mt-1;
+  }
+  .md ul.contains-task-list {
+    @apply list-none pl-0;
+  }
+  .md li.md-task {
+    @apply flex items-start gap-2 rounded-lg px-1 py-0.5;
+  }
+  .md li.md-task-done > div {
+    @apply text-muted line-through decoration-line-strong;
+  }
+  .md-check {
+    @apply mr-2 inline-block size-4 align-[-3px] accent-[#2563eb];
+  }
+  .md a {
+    @apply font-medium text-primary underline-offset-2 hover:underline;
+  }
+  .md blockquote {
+    @apply border-l-3 border-primary bg-primary-soft/60 px-3 py-2 text-muted;
+  }
+  .md code {
+    @apply rounded bg-surface-2 px-1 py-0.5 font-mono text-[0.85em];
+  }
+  .md pre {
+    @apply overflow-x-auto rounded-lg bg-sidebar p-3 text-xs text-white;
+  }
+  .md pre code {
+    @apply bg-transparent p-0;
+  }
+  .md table {
+    @apply w-full border-collapse text-sm;
+  }
+  .md th,
+  .md td {
+    @apply border border-line px-2 py-1.5 text-left;
+  }
+  .md th {
+    @apply bg-surface-2 font-semibold;
+  }
+  .md hr {
+    @apply border-line;
+  }
+  .md-editor {
+    @apply overflow-hidden rounded-lg border border-line-strong shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20;
+  }
+  .md-editor-error {
+    @apply border-danger;
+  }
 }
 
 @media print {

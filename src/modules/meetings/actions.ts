@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
 import { ValidationError } from "@/lib/errors";
 import {
-  addAgendaItem,
   addDecision,
   createMeeting,
   createSeries,
@@ -12,15 +11,13 @@ import {
   deleteMeeting,
   deleteTemplate,
   generateSeriesMeetings,
-  moveAgendaItem,
-  removeAgendaItem,
   removeDecision,
+  saveAgenda,
   saveMinutes,
   setAttendance,
   templateFromMeeting,
-  toggleAgendaDiscussed,
+  toggleAgendaTask,
   toggleSeries,
-  updateAgendaItem,
   updateMeeting,
 } from "./service";
 
@@ -54,28 +51,19 @@ export async function saveMinutesAction(id: string, _: ActionState, fd: FormData
   });
 }
 
-export async function addAgendaItemAction(meetingId: string, _: ActionState, fd: FormData) {
+export async function saveAgendaAction(meetingId: string, _: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
-    await addAgendaItem(db, actor, meetingId, formToObject(fd));
-    return { message: "Item adicionado à pauta.", revalidate: [path(meetingId)] };
+    await saveAgenda(db, actor, meetingId, formToObject(fd));
+    return { message: "Pauta salva.", revalidate: [path(meetingId)] };
   });
 }
 
-export async function updateAgendaItemAction(itemId: string, meetingId: string, _: ActionState, fd: FormData) {
+export async function toggleAgendaTaskAction(meetingId: string, _: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
-    await updateAgendaItem(db, actor, itemId, formToObject(fd));
-    return { message: "Item atualizado.", revalidate: [path(meetingId)] };
-  });
-}
-
-export async function agendaCommandAction(itemId: string, meetingId: string, _: ActionState, fd: FormData) {
-  return runAction(fd, async (actor) => {
-    const cmd = fd.get("cmd");
-    if (cmd === "up" || cmd === "down") await moveAgendaItem(db, actor, itemId, cmd);
-    else if (cmd === "toggle") await toggleAgendaDiscussed(db, actor, itemId);
-    else if (cmd === "remove") await removeAgendaItem(db, actor, itemId);
-    else throw new ValidationError("Comando inválido.");
-    return { message: "Pauta atualizada.", revalidate: [path(meetingId)] };
+    const line = Number(fd.get("line"));
+    if (!Number.isInteger(line) || line < 1) throw new ValidationError("Item inválido.");
+    await toggleAgendaTask(db, actor, meetingId, line);
+    return { revalidate: [path(meetingId)] };
   });
 }
 

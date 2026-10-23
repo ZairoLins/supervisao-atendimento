@@ -8,7 +8,10 @@ import { MEETING_TYPE, WEEKDAYS, options } from "@/lib/labels";
 import { listSeries, listTemplates } from "@/modules/meetings/service";
 import { employeeOptions } from "@/modules/employees/service";
 import { createSeriesAction, createTemplateAction, deleteTemplateAction, generateSeriesAction, toggleSeriesAction } from "@/modules/meetings/actions";
-import { ActionForm, CheckboxGroup, FormMessage, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
+import { ActionForm, CheckboxGroup, FormMessage, SelectField, SubmitButton, TextField } from "@/components/ui/form";
+import { Markdown } from "@/components/ui/markdown";
+import { MarkdownField } from "@/components/ui/markdown-field";
+import { AGENDA_HINT } from "../meeting-form";
 import { Badge, LabelBadge, PageHeader, Panel } from "@/components/ui/primitives";
 
 export const metadata: Metadata = { title: "Modelos e recorrência" };
@@ -81,9 +84,7 @@ export default async function TemplatesPage() {
                         <SubmitButton variant="ghost" className="btn-sm" confirm="Remover este modelo? Séries que o usam ficam sem modelo.">Remover</SubmitButton>
                       </ActionForm>
                     </div>
-                    <ol className="mt-2 list-inside list-decimal text-xs text-muted">
-                      {t.agendaItems.map((a, i) => <li key={i}>{a}</li>)}
-                    </ol>
+                    {t.agenda.trim() ? <Markdown className="mt-2 text-xs text-muted">{t.agenda}</Markdown> : <p className="mt-2 text-xs text-subtle">Sem pauta.</p>}
                   </li>
                 ))}
               </ul>
@@ -94,7 +95,7 @@ export default async function TemplatesPage() {
               <TextField name="name" label="Nome" required className="sm:col-span-2" maxLength={120} />
               <SelectField name="type" label="Tipo" options={options(MEETING_TYPE)} defaultValue="WEEKLY" />
               <TextField name="durationMinutes" label="Duração (min)" type="number" min={5} max={600} defaultValue={60} required />
-              <TextAreaField name="agenda" label="Itens da pauta (um por linha)" rows={6} className="sm:col-span-2" />
+              <MarkdownField name="agenda" label="Pauta (Markdown)" rows={8} maxLength={20000} className="sm:col-span-2" hint={AGENDA_HINT} />
               <div className="flex flex-wrap items-center gap-3 sm:col-span-2"><SubmitButton>Criar modelo</SubmitButton><FormMessage /></div>
             </ActionForm>
           </Panel>

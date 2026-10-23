@@ -126,7 +126,19 @@ sudo systemctl restart supervisao
 
 Para reverter: volte o código à versão anterior, rode `npm ci && npm run build` e, se a nova migração tiver alterado dados, restaure o backup feito antes da atualização.
 
-## 11. Verificação pós-implantação
+## 11. WhatsApp (opcional)
+
+Os envios ao gestor e ao grupo usam a **Evolution API** (não oficial) rodando no próprio servidor:
+
+```bash
+sudo bash /opt/supervisao/app/deploy/instalar-whatsapp.sh
+```
+
+O script instala o Docker (se faltar), gera `/etc/supervisao/evolution.env` com chave e senha aleatórias, sobe a API + PostgreSQL + Redis (somente em 127.0.0.1:8080), cria a instância `supervisao`, grava `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e `EVOLUTION_INSTANCE` em `/etc/supervisao/supervisao.env`, ativa o timer `supervisao-avisos` e reinicia a aplicação. Em seguida, em **WhatsApp**, leia o QR Code com o número que fará os envios, cadastre o gestor, escolha o grupo e use os botões de teste.
+
+Atenção: integração não oficial — contraria os termos do WhatsApp e o número pode ser bloqueado. Use um número dedicado.
+
+## 12. Verificação pós-implantação
 
 - `https://supervisao.empresa.local/login` carrega; login funciona; *Configurações › Auditoria* registra o login.
 - `curl -I https://.../api/pesquisa?q=teste` sem sessão retorna **401**.

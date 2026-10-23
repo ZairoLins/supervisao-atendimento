@@ -1,6 +1,6 @@
 # Supervisão de Atendimento
 
-Aplicação web interna, em português, que centraliza a rotina do supervisor de uma equipe de atendimento: colaboradores, frequência e escalas (incluindo 12x36), métricas lançadas por semana (com relatório semanal em PDF/Excel), reuniões e atas, feedbacks, anotações, relatórios Excel/PDF e **pesquisa global** (Ctrl/⌘+K) em todos os módulos.
+Aplicação web interna, em português, que centraliza a rotina do supervisor de uma equipe de atendimento: colaboradores, frequência e escalas (incluindo 12x36), métricas lançadas por semana com quantidade de avaliações (relatórios semanal e mensal em PDF/Excel), reuniões com pauta em Markdown e atas, quadro Kanban da semana, envio de relatórios e avisos pelo WhatsApp, feedbacks, anotações, relatórios Excel/PDF e **pesquisa global** (Ctrl/⌘+K) em todos os módulos.
 
 Visual moderno em azul, branco e preto: navegação lateral preta, conteúdo em cartões brancos e azul como cor de ação e destaque.
 
@@ -70,3 +70,7 @@ Veja [.env.example](.env.example). Obrigatórias: `DATABASE_URL`, `SESSION_SECRE
 - A jornada padrão de Funcionário inclui sábado 08:00–12:00; jornadas semanais podem ter horário próprio no sábado/domingo.
 - Vigências de jornada lançadas por engano podem ser excluídas (a anterior é reaberta quando aplicável).
 - Atraso e saída antecipada pedem só a hora de chegada/saída; o restante do período vem da escala do colaborador.
+- A nota média da equipe é ponderada pela **quantidade de avaliações** de cada lançamento (10 com 2 avaliações pesa menos que 9,2 com 13); semanas com 0 avaliações não entram na nota. Lançamentos antigos, sem a quantidade, usam o volume de chamados como peso.
+- A pauta das reuniões é escrita em Markdown; itens `- [ ]` viram checklist marcado durante a reunião.
+- O período da **folha** vai do dia 20 ao dia 19 do mês seguinte (relatório "Ocorrências da folha").
+- O WhatsApp usa a **Evolution API** (integração não oficial, com um número conectado por QR Code). Isso contraria os termos de uso do WhatsApp e o número pode ser bloqueado: use um número dedicado. Sem a configuração, os envios ficam desativados e o restante do sistema funciona normalmente.

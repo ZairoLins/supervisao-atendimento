@@ -7,12 +7,14 @@ import { logoutAction } from "../login/actions";
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const actor = await requireActor();
   const allowed: NavKey[] = ["dashboard"];
+  if (can(actor, "kanban:manage")) allowed.push("kanban");
   if (can(actor, "employees:read")) allowed.push("employees");
   if (can(actor, "meetings:read")) allowed.push("meetings");
   if (can(actor, "attendance:read")) allowed.push("attendance");
   if (can(actor, "metrics:read")) allowed.push("metrics");
   if (can(actor, "feedbacks:read")) allowed.push("feedbacks");
   if (can(actor, "reports:export")) allowed.push("reports");
+  if (can(actor, "messages:send")) allowed.push("whatsapp");
   allowed.push("settings");
 
   return (

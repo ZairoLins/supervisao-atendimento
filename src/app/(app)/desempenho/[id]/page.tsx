@@ -38,7 +38,8 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
               items={[
                 { label: "Chamados atendidos", value: m.ticketsHandled.toLocaleString("pt-BR") },
                 { label: "Tempo médio de atendimento", value: `${dec(m.avgHandleMinutes)} min` },
-                { label: "Avaliação média", value: dec(m.avgRating) },
+                { label: "Avaliação média", value: m.ratingCount === 0 ? "— (sem avaliações)" : dec(m.avgRating) },
+                { label: "Quantidade de avaliações", value: m.ratingCount === null ? "Não informada" : m.ratingCount.toLocaleString("pt-BR") },
                 { label: "Função e equipe na semana", value: `${m.jobTitleSnapshot} · ${m.teamSnapshot}` },
                 { label: "Lançado em", value: formatDateTime(m.createdAt, tz) },
               ]}
@@ -53,7 +54,7 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
             ) : (
               <div className="table-wrap">
                 <table className="table">
-                  <thead><tr><th>Corrigido em</th><th className="text-right">Chamados</th><th className="text-right">TMA</th><th className="text-right">Avaliação</th><th>Motivo</th></tr></thead>
+                  <thead><tr><th>Corrigido em</th><th className="text-right">Chamados</th><th className="text-right">TMA</th><th className="text-right">Avaliação</th><th className="text-right">Qtd.</th><th>Motivo</th></tr></thead>
                   <tbody>
                     {m.revisions.map((r) => (
                       <tr key={r.id}>
@@ -61,6 +62,7 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
                         <td className="text-right tabular-nums">{r.ticketsHandled.toLocaleString("pt-BR")}</td>
                         <td className="text-right tabular-nums">{dec(r.avgHandleMinutes)}</td>
                         <td className="text-right tabular-nums">{dec(r.avgRating)}</td>
+                        <td className="text-right tabular-nums">{r.ratingCount ?? "—"}</td>
                         <td className="text-xs text-muted">{r.reason}</td>
                       </tr>
                     ))}
@@ -75,7 +77,8 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
             <ActionForm action={correctMetricAction.bind(null, m.id)} className="flex flex-col gap-5">
               <TextField name="ticketsHandled" label="Chamados atendidos" type="number" required min={0} defaultValue={m.ticketsHandled} />
               <TextField name="avgHandleMinutes" label="Tempo médio (min)" type="number" step="0.01" min={0} required defaultValue={Number(m.avgHandleMinutes)} />
-              <TextField name="avgRating" label="Avaliação média (0 a 10)" type="number" step="0.01" min={0} max={10} required defaultValue={Number(m.avgRating)} />
+              <TextField name="avgRating" label="Avaliação média (0 a 10)" type="number" step="0.01" min={0} max={10} defaultValue={m.ratingCount === 0 ? null : Number(m.avgRating)} hint="Pode ficar em branco quando não houve avaliações." />
+              <TextField name="ratingCount" label="Quantidade de avaliações" type="number" step="1" min={0} required defaultValue={m.ratingCount} />
               <TextAreaField name="notes" label="Observações" rows={3} defaultValue={m.notes} maxLength={2000} />
               <TextAreaField name="reason" label="Motivo da correção" required rows={2} maxLength={500} />
               <SubmitButton>Registrar correção</SubmitButton>

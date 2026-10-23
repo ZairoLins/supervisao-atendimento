@@ -9,6 +9,10 @@ const schema = z.object({
   ATTACHMENTS_DIR: z.string().default("./storage/anexos"),
   // Diretório onde o script de backup grava os dumps (somente leitura pela aplicação)
   BACKUP_DIR: z.string().optional(),
+  // WhatsApp via Evolution API (opcionais; lidos também por scripts/send-reminders.ts)
+  EVOLUTION_API_URL: z.string().url("EVOLUTION_API_URL inválida").optional(),
+  EVOLUTION_API_KEY: z.string().optional(),
+  EVOLUTION_INSTANCE: z.string().optional(),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(12),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });

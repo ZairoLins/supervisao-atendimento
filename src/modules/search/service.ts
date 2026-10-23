@@ -3,7 +3,7 @@ import { addDays, endOfMonth, formatDate, formatTimeRange } from "@/lib/dates";
 import { weekLabel, weekStartOf } from "@/modules/metrics/service";
 import { EMPLOYEE_STATUS, FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, NOTE_CATEGORY } from "@/lib/labels";
 import { can, type Actor, type Permission } from "@/lib/permissions";
-import { formatCode, normalizeQuery, normalizeText, parseCodeQuery, truncate, type CodeEntity } from "@/lib/text";
+import { formatCode, normalizeQuery, normalizeText, parseCodeQuery, type CodeEntity } from "@/lib/text";
 import { parseDayQuery, parseMonthQuery, scoreMatch } from "./ranking";
 import { SEARCH_TYPE_LABEL, SEARCH_TYPES, type SearchGroup, type SearchResponse, type SearchResult, type SearchType } from "./types";
 
@@ -112,27 +112,6 @@ const PROVIDERS: Provider[] = [
     },
   },
   {
-    type: "agenda",
-    permission: "meetings:read",
-    async run(db, _actor, ctx) {
-      const rows = await db.meetingAgendaItem.findMany({
-        where: { searchText: { contains: ctx.q }, meeting: { deletedAt: null, ...(dateRange(ctx) ? { date: dateRange(ctx) } : {}) } },
-        include: { meeting: { select: { id: true, title: true, date: true } } },
-        take: ctx.take,
-        orderBy: { meeting: { date: "desc" } },
-      });
-      return rows.map((a) => ({
-        type: "agenda",
-        id: a.id,
-        title: a.title,
-        summary: `Pauta de "${truncate(a.meeting.title, 60)}"${a.discussed ? " · discutido" : ""}`,
-        date: formatDate(a.meeting.date),
-        url: `/reunioes/${a.meeting.id}#pauta`,
-        score: scoreMatch(a.title, ctx.raw, { recency: a.meeting.date }),
-      }));
-    },
-  },
-  {
     type: "metric",
     permission: "metrics:read",
     async run(db, _actor, ctx) {
@@ -153,7 +132,7 @@ const PROVIDERS: Provider[] = [
         type: "metric",
         id: m.id,
         title: `${m.employee.fullName} — semana ${weekLabel(m.weekStart)}`,
-        summary: `${m.ticketsHandled} chamados · TMA ${Number(m.avgHandleMinutes).toLocaleString("pt-BR")} min · avaliação ${Number(m.avgRating).toLocaleString("pt-BR")}`,
+        summary: `${m.ticketsHandled} chamados · TMA ${Number(m.avgHandleMinutes).toLocaleString("pt-BR")} min · avaliação ${m.ratingCount === 0 ? "—" : Number(m.avgRating).toLocaleString("pt-BR")}${m.ratingCount !== null ? ` (${m.ratingCount})` : ""}`,
         date: formatDate(m.weekStart),
         url: `/desempenho/${m.id}`,
         score: byDate ? 300 : related(m.employee.fullName, ctx, m.weekStart),

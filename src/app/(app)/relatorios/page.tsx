@@ -13,6 +13,8 @@ export const metadata: Metadata = { title: "Relatórios" };
 
 const REQUIRED: Record<ReportKind, Permission> = {
   semanal: "metrics:read",
+  mensal: "metrics:read",
+  folha: "attendance:read",
   metricas: "metrics:read",
   desempenho: "metrics:read",
   frequencia: "attendance:read",
@@ -41,6 +43,7 @@ export default async function ReportsPage() {
           employees={employees.map((e) => ({ value: e.value, label: e.label }))}
           categories={{
             semanal: teams.map((t) => ({ value: t, label: t })),
+            mensal: teams.map((t) => ({ value: t, label: t })),
             metricas: teams.map((t) => ({ value: t, label: t })),
             frequencia: types.map((t) => ({ value: t.name, label: t.name })),
             reunioes: options(MEETING_TYPE),

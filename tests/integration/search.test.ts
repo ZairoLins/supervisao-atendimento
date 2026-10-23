@@ -33,7 +33,7 @@ describe.skipIf(!hasTestDb)("pesquisa global", () => {
       agenda: "Revisão da escala de dezembro\nIndicadores de satisfação",
       participantIds: [ana.id],
     });
-    await createMetric(testDb(), sup, { employeeId: ana.id, week: "2026-09-18", ticketsHandled: "210", avgHandleMinutes: "7", avgRating: "9" }, new Date(Date.UTC(2026, 9, 23)));
+    await createMetric(testDb(), sup, { employeeId: ana.id, week: "2026-09-18", ticketsHandled: "210", avgHandleMinutes: "7", avgRating: "9", ratingCount: "210" }, new Date(Date.UTC(2026, 9, 23)));
     const atestado = await occurrenceType("ATESTADO");
     await createOccurrence(testDb(), sup, { employeeId: ana.id, typeId: atestado.id, date: "2026-10-02", adminNotes: "Entregue na recepção", restrictedNotes: "Diagnóstico sigiloso XPTO" });
     await createFeedback(testDb(), sup, { employeeId: ana.id, date: "2026-10-03", type: "RECOGNITION", context: "Elogio de cliente sobre empatia", positives: "Detalhe privado da conversa" });
@@ -65,8 +65,7 @@ describe.skipIf(!hasTestDb)("pesquisa global", () => {
     const r = await globalSearch(testDb(), sup, "férias coletivas", { limit: 5 });
     expect(titles(r)).toContain("meeting:Planejamento de férias coletivas");
     const r2 = await globalSearch(testDb(), sup, "dezembro", { limit: 5 });
-    expect(titles(r2)).toContain("agenda:Revisão da escala de dezembro");
-    expect(r2.groups.find((g) => g.type === "agenda")!.items[0].url).toMatch(/#pauta$/);
+    expect(titles(r2)).toContain("meeting:Planejamento de férias coletivas");
   });
 
   it("encontra por identificador", async () => {

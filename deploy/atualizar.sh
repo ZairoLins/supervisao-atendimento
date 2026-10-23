@@ -35,6 +35,12 @@ as_app "npx prisma db seed" | tail -n 1
 as_app "NODE_ENV=production npx next build" | tail -n 3
 
 echo "▸ Reiniciando o serviço"
+# Aviso automático do WhatsApp: atualiza as unidades se já estiverem instaladas (instalar-whatsapp.sh)
+if [[ -f /etc/systemd/system/supervisao-avisos.timer ]]; then
+  install -m 644 "$APP_DIR/deploy/supervisao-avisos.service" /etc/systemd/system/supervisao-avisos.service
+  install -m 644 "$APP_DIR/deploy/supervisao-avisos.timer" /etc/systemd/system/supervisao-avisos.timer
+  systemctl daemon-reload
+fi
 systemctl restart supervisao
 for _ in $(seq 1 30); do
   code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$APP_PORT/login" || true)

@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { AppError } from "@/lib/errors";
 import { parseDateKey } from "@/lib/dates";
 import { createEmployee, inactivateEmployee, listEmployees, reactivateEmployee, updateEmployee } from "@/modules/employees/service";
-import { combine, correctMetric, createMetric, fridayOf, getMetric, metricSeries, saveWeeklyBatch, weekStartOf, weeklyReportData, weeklySeries } from "@/modules/metrics/service";
+import { combine, correctMetric, createMetric, fridayOf, getMetric, metricSeries, metricsReportData, saveWeeklyBatch, weekStartOf, weeklySeries } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback } from "@/modules/feedbacks/service";
 import { createUser, disconnect, hasTestDb, resetDb, testDb } from "../support/db";
@@ -34,7 +34,7 @@ describe.skipIf(!hasTestDb)("colaboradores", () => {
   it("inativa sem excluir históricos e preserva vínculos por ID após renomear", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
-    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-15", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9" }, parseDateKey("2026-10-23"));
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-15", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9", ratingCount: "100" }, parseDateKey("2026-10-23"));
     const falta = await occurrenceType("FALTA");
     await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: falta.id, date: "2026-09-10" });
     await createFeedback(testDb(), sup, { employeeId: e.id, date: "2026-09-12", type: "ALIGNMENT", context: "Alinhamento de fila" });
@@ -78,6 +78,7 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     ticketsHandled: "320",
     avgHandleMinutes: "6,5",
     avgRating: "8.75",
+    ratingCount: "40",
     ...over,
   });
 
@@ -123,7 +124,7 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     const r1 = await saveWeeklyBatch(
       testDb(),
       sup,
-      { week: "2026-10-23", [`t_${a.id}`]: "400", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "200", [`a_${b.id}`]: "7,5", [`r_${b.id}`]: "8", [`t_${c.id}`]: "", [`a_${c.id}`]: "", [`r_${c.id}`]: "" },
+      { week: "2026-10-23", [`t_${a.id}`]: "400", [`q_${a.id}`]: "400", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "200", [`q_${b.id}`]: "200", [`a_${b.id}`]: "7,5", [`r_${b.id}`]: "8", [`t_${c.id}`]: "", [`q_${c.id}`]: "", [`a_${c.id}`]: "", [`r_${c.id}`]: "" },
       TODAY,
     );
     expect(r1).toMatchObject({ created: 2, updated: 0, unchanged: 0 });
@@ -132,7 +133,7 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     const r2 = await saveWeeklyBatch(
       testDb(),
       sup,
-      { week: "2026-10-19", [`t_${a.id}`]: "410", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "200", [`a_${b.id}`]: "7.5", [`r_${b.id}`]: "8" },
+      { week: "2026-10-19", [`t_${a.id}`]: "410", [`q_${a.id}`]: "410", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "200", [`q_${b.id}`]: "200", [`a_${b.id}`]: "7.5", [`r_${b.id}`]: "8" },
       TODAY,
     );
     expect(r2).toMatchObject({ created: 0, updated: 1, unchanged: 1 });
@@ -140,7 +141,7 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     expect(ma.ticketsHandled).toBe(410);
     expect(ma.revisions.map((r) => r.ticketsHandled)).toEqual([400]);
 
-    const err = await saveWeeklyBatch(testDb(), sup, { week: "2026-10-12", [`t_${c.id}`]: "10", [`r_${a.id}`]: "11", [`t_${a.id}`]: "1", [`a_${a.id}`]: "1" }, TODAY).catch((x) => x);
+    const err = await saveWeeklyBatch(testDb(), sup, { week: "2026-10-12", [`t_${c.id}`]: "10", [`q_${c.id}`]: "10", [`r_${a.id}`]: "11", [`t_${a.id}`]: "1", [`q_${a.id}`]: "1", [`a_${a.id}`]: "1" }, TODAY).catch((x) => x);
     expect(err).toBeInstanceOf(AppError);
     expect(err.fieldErrors).toHaveProperty(`a_${c.id}`);
     expect(err.fieldErrors).toHaveProperty(`r_${a.id}`);
@@ -152,14 +153,14 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
     const m = await createMetric(testDb(), sup, base(e.id), TODAY);
-    await correctMetric(testDb(), sup, m.id, { ticketsHandled: "330", avgHandleMinutes: "6.5", avgRating: "8.75", reason: "Ajuste da fonte" });
-    await correctMetric(testDb(), sup, m.id, { ticketsHandled: "331", avgHandleMinutes: "6.4", avgRating: "8.8", reason: "Nova conferência" });
+    await correctMetric(testDb(), sup, m.id, { ticketsHandled: "330", avgHandleMinutes: "6.5", avgRating: "8.75", ratingCount: "330", reason: "Ajuste da fonte" });
+    await correctMetric(testDb(), sup, m.id, { ticketsHandled: "331", avgHandleMinutes: "6.4", avgRating: "8.8", ratingCount: "331", reason: "Nova conferência" });
     const full = await getMetric(testDb(), sup, m.id);
     expect(full.ticketsHandled).toBe(331);
     expect(full.revisions).toHaveLength(2);
     expect(full.revisions[full.revisions.length - 1].ticketsHandled).toBe(320);
-    await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "331", avgHandleMinutes: "6.4", avgRating: "8.8", reason: "x" })).rejects.toThrow(/Nenhum valor/);
-    await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "1", avgHandleMinutes: "1", avgRating: "1" })).rejects.toBeInstanceOf(ZodError);
+    await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "331", avgHandleMinutes: "6.4", avgRating: "8.8", ratingCount: "331", reason: "x" })).rejects.toThrow(/Nenhum valor/);
+    await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "1", avgHandleMinutes: "1", avgRating: "1", ratingCount: "1" })).rejects.toBeInstanceOf(ZodError);
   });
 
   it("semana conta no mês da sua sexta-feira; séries mensal e semanal", async () => {
@@ -167,12 +168,12 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     const a = await makeEmployee(sup);
     const b = await makeEmployee(sup);
     // Semana 27/07–02/08: sexta 31/07 → julho
-    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-07-27", ticketsHandled: "50", avgHandleMinutes: "5", avgRating: "7" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-07-27", ticketsHandled: "50", avgHandleMinutes: "5", avgRating: "7", ratingCount: "50" }, TODAY);
     // Semana 03/08: agosto
-    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-03", ticketsHandled: "100", avgHandleMinutes: "4", avgRating: "8" }, TODAY);
-    await createMetric(testDb(), sup, { employeeId: b.id, week: "2026-08-03", ticketsHandled: "300", avgHandleMinutes: "8", avgRating: "10" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-03", ticketsHandled: "100", avgHandleMinutes: "4", avgRating: "8", ratingCount: "100" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: b.id, week: "2026-08-03", ticketsHandled: "300", avgHandleMinutes: "8", avgRating: "10", ratingCount: "300" }, TODAY);
     // Semana 31/08–06/09: sexta 04/09 → setembro (mesmo começando em agosto)
-    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-31", ticketsHandled: "10", avgHandleMinutes: "1", avgRating: "1" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-31", ticketsHandled: "10", avgHandleMinutes: "1", avgRating: "1", ratingCount: "10" }, TODAY);
     const s = await metricSeries(testDb(), sup, { months: 3, end: parseDateKey("2026-09-01") });
     expect(s.map((p) => [p.month, p.tickets])).toEqual([["2026-07", 50], ["2026-08", 400], ["2026-09", 10]]);
     expect(s[1].aht).toBe(7);
@@ -184,17 +185,57 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
   it("dados do relatório semanal comparam com a semana anterior", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup, { fullName: "Bia Souza" });
-    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-12", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "8" }, TODAY);
-    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-19", ticketsHandled: "120", avgHandleMinutes: "4", avgRating: "9", notes: "Semana com campanha" }, TODAY);
-    const r = await weeklyReportData(testDb(), sup, parseDateKey("2026-10-22"));
-    expect(r.weekStart.toISOString().slice(0, 10)).toBe("2026-10-19");
-    expect(r.rows[0]).toMatchObject({ name: "Bia Souza", tickets: 120, prev: { tickets: 100 } });
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-12", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "8", ratingCount: "100" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-19", ticketsHandled: "120", avgHandleMinutes: "4", avgRating: "9", ratingCount: "120", notes: "Semana com campanha" }, TODAY);
+    const r = await metricsReportData(testDb(), sup, "semanal", parseDateKey("2026-10-22"));
+    expect(r.periodStart.toISOString().slice(0, 10)).toBe("2026-10-19");
+    expect(r.rows[0]).toMatchObject({ name: "Bia Souza", tickets: 120, ratings: 120, prev: { tickets: 100 } });
     expect(r.total.tickets).toBe(120);
     expect(r.previousTotal.tickets).toBe(100);
   });
 
-  it("combine pondera tempo médio e avaliação pelo volume", () => {
-    expect(combine([])).toEqual({ tickets: null, aht: null, rating: null, count: 0 });
-    expect(combine([{ ticketsHandled: 0, avgHandleMinutes: 4, avgRating: 6 }, { ticketsHandled: 0, avgHandleMinutes: 6, avgRating: 8 }])).toMatchObject({ tickets: 0, aht: 5, rating: 7 });
+  it("dados do relatório mensal somam as semanas com sexta no mês e comparam com o mês anterior", async () => {
+    const sup = await createUser();
+    const e = await makeEmployee(sup, { fullName: "Caio" });
+    // Setembro: semana de 28/09 tem sexta 02/10 → conta em outubro
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-21", ticketsHandled: "50", avgHandleMinutes: "5", avgRating: "8", ratingCount: "5" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-28", ticketsHandled: "100", avgHandleMinutes: "4", avgRating: "10", ratingCount: "2", notes: "Início" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-05", ticketsHandled: "100", avgHandleMinutes: "6", avgRating: "9", ratingCount: "8" }, TODAY);
+    const r = await metricsReportData(testDb(), sup, "mensal", parseDateKey("2026-10-15"));
+    expect(r.weeks).toBe(2);
+    expect(r.rows[0]).toMatchObject({ tickets: 200, aht: 5, ratings: 10, weeks: 2, rating: 9.2, prev: { tickets: 50, ratings: 5 } });
+    expect(r.rows[0].notes).toContain("28/09: Início");
+  });
+
+  it("nota ponderada pela quantidade de avaliações; semanas sem avaliação ficam de fora", () => {
+    expect(combine([])).toEqual({ tickets: null, aht: null, rating: null, ratings: null, count: 0 });
+    // Antigos (sem quantidade): peso pelo volume de chamados; sem chamados, média simples
+    expect(combine([{ ticketsHandled: 0, avgHandleMinutes: 4, avgRating: 6 }, { ticketsHandled: 0, avgHandleMinutes: 6, avgRating: 8 }])).toMatchObject({ tickets: 0, aht: 5, rating: 7, ratings: null });
+    // 10 com 2 avaliações x 9,2 com 13 avaliações
+    const c = combine([
+      { ticketsHandled: 50, avgHandleMinutes: 5, avgRating: 10, ratingCount: 2 },
+      { ticketsHandled: 50, avgHandleMinutes: 5, avgRating: 9.2, ratingCount: 13 },
+      { ticketsHandled: 50, avgHandleMinutes: 5, avgRating: 0, ratingCount: 0 },
+    ]);
+    expect(c).toMatchObject({ ratings: 15, rating: 9.31 });
+    expect(combine([{ ticketsHandled: 5, avgHandleMinutes: 1, avgRating: 0, ratingCount: 0 }])).toMatchObject({ rating: null, ratings: 0 });
+  });
+
+  it("quantidade de avaliações: obrigatória em lançamentos novos; nota em branco quando é 0", async () => {
+    const sup = await createUser();
+    const e = await makeEmployee(sup);
+    await expect(createMetric(testDb(), sup, base(e.id, { ratingCount: "" }), TODAY)).rejects.toBeInstanceOf(ZodError);
+    await expect(createMetric(testDb(), sup, base(e.id, { ratingCount: "-1" }), TODAY)).rejects.toBeInstanceOf(ZodError);
+    const m = await createMetric(testDb(), sup, base(e.id, { ratingCount: "0", avgRating: "" }), TODAY);
+    expect(m).toMatchObject({ ratingCount: 0 });
+    // Lançamento antigo (sem quantidade) pode ser mantido no lote sem informá-la
+    const legacy = await makeEmployee(sup);
+    await testDb().weeklyMetric.create({ data: { employeeId: legacy.id, weekStart: parseDateKey("2026-10-12"), ticketsHandled: 10, avgHandleMinutes: 1, avgRating: 9, jobTitleSnapshot: "x", teamSnapshot: "y" } });
+    const r = await saveWeeklyBatch(testDb(), sup, { week: "2026-10-12", [`t_${legacy.id}`]: "10", [`a_${legacy.id}`]: "1", [`r_${legacy.id}`]: "9", [`q_${legacy.id}`]: "" }, TODAY);
+    expect(r.unchanged).toBe(1);
+    const r2 = await saveWeeklyBatch(testDb(), sup, { week: "2026-10-12", [`t_${legacy.id}`]: "10", [`a_${legacy.id}`]: "1", [`r_${legacy.id}`]: "9", [`q_${legacy.id}`]: "7" }, TODAY);
+    expect(r2.updated).toBe(1);
+    const rev = await testDb().weeklyMetricRevision.findFirstOrThrow({ where: { metric: { employeeId: legacy.id } } });
+    expect(rev.ratingCount).toBeNull();
   });
 });

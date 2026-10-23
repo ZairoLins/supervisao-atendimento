@@ -102,7 +102,7 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat label={`Chamados em ${formatMonth(month)}`} value={monthTotal.tickets?.toLocaleString("pt-BR") ?? "—"} hint={scopeLabel} />
         <Stat label="Tempo médio" value={monthTotal.aht === null ? "—" : `${fmt(monthTotal.aht)} min`} hint="Ponderado pelos chamados" />
-        <Stat label="Avaliação média" value={fmt(monthTotal.rating)} hint="Escala de 0 a 10" />
+        <Stat label="Avaliação média" value={fmt(monthTotal.rating)} hint={monthTotal.ratings !== null ? `${monthTotal.ratings.toLocaleString("pt-BR")} avaliação(ões) · ponderada` : "Escala de 0 a 10"} />
         <Stat label="Semanas com lançamento" value={monthTotal.weeks} hint={`${monthTotal.count} lançamento(s) no mês`} />
       </div>
 
@@ -193,7 +193,7 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
                         <td className="text-right tabular-nums">{p.weeks}</td>
                         <td className="text-right tabular-nums">{p.tickets?.toLocaleString("pt-BR")}</td>
                         <td className="text-right tabular-nums">{fmt(p.aht)}</td>
-                        <td className="text-right tabular-nums">{fmt(p.rating)}</td>
+                        <td className="text-right tabular-nums">{p.ratings === 0 ? "—" : fmt(p.rating)}{p.ratings !== null ? <span className="block text-[11px] text-subtle">{p.ratings} aval.</span> : null}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -220,7 +220,7 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
                         <td>{m.employee.fullName}</td>
                         <td className="text-right tabular-nums">{m.ticketsHandled.toLocaleString("pt-BR")}</td>
                         <td className="text-right tabular-nums">{fmt(Number(m.avgHandleMinutes))}</td>
-                        <td className="text-right tabular-nums">{fmt(Number(m.avgRating))}</td>
+                        <td className="text-right tabular-nums">{m.ratingCount === 0 ? "—" : fmt(Number(m.avgRating))}{m.ratingCount !== null ? <span className="block text-[11px] text-subtle">{m.ratingCount} aval.</span> : null}</td>
                         <td className="text-xs text-subtle">{m._count.revisions ? `${m._count.revisions} correção(ões)` : "Original"}</td>
                       </tr>
                     ))}

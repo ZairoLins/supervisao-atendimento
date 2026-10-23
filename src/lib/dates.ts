@@ -175,3 +175,21 @@ export function formatDateTime(date: Date, timeZone = "America/Sao_Paulo"): stri
     minute: "2-digit",
   }).format(date);
 }
+
+/** Deslocamento (ms) do fuso em relação ao UTC em um instante. */
+function zoneOffsetMs(instant: number, timeZone: string): number {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      .formatToParts(new Date(instant))
+      .map((x) => [x.type, x.value]),
+  );
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - instant;
+}
+
+/** Instante real de uma data de calendário + minutos (horário local do fuso informado). */
+export function zonedDateTimeToUtc(date: Date, minutes: number, timeZone: string): Date {
+  const local = date.getTime() + minutes * 60_000;
+  let utc = local - zoneOffsetMs(local, timeZone);
+  utc = local - zoneOffsetMs(utc, timeZone);
+  return new Date(utc);
+}

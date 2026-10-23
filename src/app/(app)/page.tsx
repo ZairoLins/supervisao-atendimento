@@ -6,6 +6,7 @@ import { requireActor } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
 import { today } from "@/lib/page";
 import { addDays, addMonths, formatDate, formatMonth, formatTime, monthKey, monthRange, parseMonthKey, startOfMonth, toDateKey } from "@/lib/dates";
+import { agendaStats } from "@/lib/markdown";
 import { readParams } from "@/lib/validation";
 import { loadDashboard } from "@/modules/dashboard/service";
 import { pctChange, weekStartOf } from "@/modules/metrics/service";
@@ -241,7 +242,7 @@ export default async function DashboardPage(props: PageProps<"/">) {
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{m.title}</span>
-                        <span className="block text-xs text-subtle">{formatTime(m.startMinute)} · {m._count.agendaItems} item(ns) de pauta</span>
+                        <span className="block text-xs text-subtle">{formatTime(m.startMinute)} · {agendaStats(m.agenda).items} item(ns) de pauta</span>
                       </span>
                     </Link>
                   </li>

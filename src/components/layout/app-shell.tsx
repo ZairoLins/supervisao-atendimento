@@ -7,11 +7,13 @@ import {
   BarChart3,
   CalendarClock,
   FileSpreadsheet,
+  KanbanSquare,
   Headset,
   LayoutDashboard,
   LogOut,
   Menu,
   MessageSquareText,
+  Send,
   Settings,
   Users,
   UsersRound,
@@ -19,16 +21,18 @@ import {
 } from "lucide-react";
 import { CommandPalette } from "@/components/search/command-palette";
 
-export type NavKey = "dashboard" | "employees" | "meetings" | "attendance" | "metrics" | "feedbacks" | "reports" | "settings";
+export type NavKey = "dashboard" | "kanban" | "employees" | "meetings" | "attendance" | "metrics" | "feedbacks" | "reports" | "whatsapp" | "settings";
 
 const NAV: Array<{ key: NavKey; href: string; label: string; icon: typeof Users }> = [
   { key: "dashboard", href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { key: "kanban", href: "/kanban", label: "Minha semana", icon: KanbanSquare },
   { key: "employees", href: "/colaboradores", label: "Colaboradores", icon: Users },
   { key: "attendance", href: "/frequencia", label: "Frequência e escalas", icon: CalendarClock },
   { key: "metrics", href: "/desempenho", label: "Desempenho", icon: BarChart3 },
   { key: "meetings", href: "/reunioes", label: "Reuniões", icon: UsersRound },
   { key: "feedbacks", href: "/feedbacks", label: "Feedbacks", icon: MessageSquareText },
   { key: "reports", href: "/relatorios", label: "Relatórios", icon: FileSpreadsheet },
+  { key: "whatsapp", href: "/whatsapp", label: "WhatsApp", icon: Send },
   { key: "settings", href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 

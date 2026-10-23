@@ -73,7 +73,6 @@ export async function loadDashboard(db: Db, actor: Actor, f: DashboardFilters, t
         where: { deletedAt: null, status: "SCHEDULED", date: { gte: today }, ...(f.employeeId ? { participants: { some: { employeeId: f.employeeId } } } : {}) },
         orderBy: [{ date: "asc" }, { startMinute: "asc" }],
         take: 5,
-        include: { _count: { select: { agendaItems: true } } },
       })
     : null;
 

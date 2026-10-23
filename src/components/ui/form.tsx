@@ -95,7 +95,7 @@ export function SubmitButton({
   );
 }
 
-function useField(name: string, defaultValue?: string | number | null) {
+export function useField(name: string, defaultValue?: string | number | null) {
   const state = useFormState();
   const id = useId();
   const error = state.fieldErrors?.[name];
@@ -112,7 +112,7 @@ type BaseFieldProps = {
   disabled?: boolean;
 };
 
-function FieldShell({
+export function FieldShell({
   id,
   label,
   hint,

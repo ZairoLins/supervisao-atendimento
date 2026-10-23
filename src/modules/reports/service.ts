@@ -5,10 +5,12 @@ import { addDays, addMonths, dayNumber, endOfMonth, formatDate, formatDuration, 
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, MEETING_TYPE, REVIEW_STATUS } from "@/lib/labels";
 import { assertCan, can, type Actor } from "@/lib/permissions";
+import { agendaStats } from "@/lib/markdown";
 import { formatCode } from "@/lib/text";
 import { teamAttendanceSummary } from "@/modules/attendance/occurrences";
-import { combine, metricSeries, pctChange, weekLabel, weeklyReportData, weekStartOf } from "@/modules/metrics/service";
-import type { WeeklyReport } from "./weekly";
+import { combine, metricSeries, metricsReportData, pctChange, weekLabel } from "@/modules/metrics/service";
+import { metricsReportTitle, type MetricsReport } from "./metrics-report";
+import { occurrencesReportData, payrollLabel, payrollPeriod, type OccurrencesReport } from "./occurrences-report";
 import { REPORT_KINDS, REPORT_LABELS, type ReportData, type ReportKind } from "./types";
 
 const dateParam = z
@@ -31,6 +33,12 @@ export const reportParamsSchema = z
     confirmar: z.enum(["1"]).optional(),
     detalhes: z.enum(["1"]).optional(),
     semana: dateParam,
+    mes: z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Mês inválido.")
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    folha: dateParam,
   })
   .refine((v) => !v.de || !v.ate || dayNumber(v.de) <= dayNumber(v.ate), { message: "A data inicial deve ser anterior à final.", path: ["de"] })
   .refine((v) => !v.de || !v.ate || dayNumber(v.ate) - dayNumber(v.de) <= 366 * 3, { message: "Período máximo de 3 anos.", path: ["ate"] });
@@ -54,7 +62,7 @@ async function employeeName(db: Db, id?: string) {
   return e.fullName;
 }
 
-const builders: Record<Exclude<ReportKind, "semanal">, (db: Db, actor: Actor, p: ReportParams, today: Date) => Promise<ReportData>> = {
+const builders: Record<Exclude<ReportKind, "semanal" | "mensal" | "folha">, (db: Db, actor: Actor, p: ReportParams, today: Date) => Promise<ReportData>> = {
   async metricas(db, actor, p, today) {
     assertCan(actor, "metrics:read");
     const { from, to } = defaultPeriod(p, today, 0);
@@ -82,7 +90,8 @@ const builders: Record<Exclude<ReportKind, "semanal">, (db: Db, actor: Actor, p:
         { key: "team", header: "Equipe", width: 18 },
         { key: "tickets", header: "Chamados", width: 11, kind: "number" },
         { key: "aht", header: "TMA (min)", width: 11, kind: "decimal" },
-        { key: "rating", header: "Avaliação", width: 11, kind: "decimal" },
+        { key: "ratings", header: "Avaliações", width: 11, kind: "number" },
+        { key: "rating", header: "Nota", width: 9, kind: "decimal" },
         { key: "revisions", header: "Correções", width: 10, kind: "number" },
         { key: "notes", header: "Observações", width: 36 },
       ],
@@ -93,12 +102,13 @@ const builders: Record<Exclude<ReportKind, "semanal">, (db: Db, actor: Actor, p:
         team: r.teamSnapshot,
         tickets: r.ticketsHandled,
         aht: Number(r.avgHandleMinutes),
-        rating: Number(r.avgRating),
+        ratings: r.ratingCount,
+        rating: r.ratingCount === 0 ? null : Number(r.avgRating),
         revisions: r._count.revisions,
         notes: r.notes,
       })),
-      totals: rows.length ? { date: "Total", tickets: total.tickets, aht: total.aht, rating: total.rating } : undefined,
-      notes: ["Totais: chamados somados; TMA e avaliação ponderados pelo volume de chamados.", "Volume maior não indica, por si só, melhor desempenho."],
+      totals: rows.length ? { date: "Total", tickets: total.tickets, aht: total.aht, ratings: total.ratings, rating: total.rating } : undefined,
+      notes: ["Totais: chamados somados; TMA ponderado pelo volume de chamados; nota ponderada pela quantidade de avaliações.", "Volume maior não indica, por si só, melhor desempenho."],
     };
   },
 
@@ -226,14 +236,14 @@ const builders: Record<Exclude<ReportKind, "semanal">, (db: Db, actor: Actor, p:
       },
       include: {
         decisions: { orderBy: { position: "asc" } },
-        _count: { select: { participants: true, agendaItems: true } },
+        _count: { select: { participants: true } },
       },
       orderBy: { date: "asc" },
     });
     const rows = meetings.flatMap((m) => {
       const base = { code: formatCode("meeting", m.code), date: formatDate(m.date), title: m.title, type: MEETING_TYPE[m.type].label, status: MEETING_STATUS[m.status].label };
       const items = m.decisions.map((d) => ({ ...base, kind: "Decisão", item: d.description }));
-      return items.length ? items : [{ ...base, kind: "—", item: `Sem decisões registradas · ${m._count.agendaItems} item(ns) de pauta` }];
+      return items.length ? items : [{ ...base, kind: "—", item: `Sem decisões registradas · ${agendaStats(m.agenda).items} item(ns) de pauta` }];
     });
     return {
       title: REPORT_LABELS.reunioes.title,
@@ -306,27 +316,52 @@ const builders: Record<Exclude<ReportKind, "semanal">, (db: Db, actor: Actor, p:
   },
 };
 
-/** Relatório semanal com design próprio (PDF/Excel em ./weekly). */
-export async function buildWeeklyReport(db: Db, actor: Actor, params: ReportParams, today: Date): Promise<WeeklyReport> {
-  if (!can(actor, "reports:export")) throw new ForbiddenError();
-  assertCan(actor, "metrics:read");
-  const week = weekStartOf(params.semana ?? params.de ?? today);
+/** Dados do relatório semanal/mensal com design próprio (PDF/Excel em ./metrics-report), sem auditoria. */
+export async function metricsReport(db: Db, actor: Actor, kind: "semanal" | "mensal", params: Pick<ReportParams, "semana" | "mes" | "de" | "colaborador" | "categoria">, today: Date): Promise<MetricsReport> {
+  const date = kind === "semanal" ? (params.semana ?? params.de ?? today) : params.mes ? parseDateKey(`${params.mes}-01`) : (params.de ?? today);
   const scope = { employeeId: params.colaborador, team: params.categoria };
-  const data = await weeklyReportData(db, actor, week, scope);
+  const data = await metricsReportData(db, actor, kind, date, scope);
   const name = await employeeName(db, params.colaborador);
+  return { ...data, scopeLabel: name ?? (params.categoria ? `Equipe ${params.categoria}` : "Toda a equipe"), generatedAt: new Date() };
+}
+
+/** Relatório semanal ou mensal para exportação (com auditoria). */
+export async function buildMetricsReport(db: Db, actor: Actor, params: ReportParams, today: Date): Promise<MetricsReport> {
+  if (!can(actor, "reports:export")) throw new ForbiddenError();
+  if (params.tipo !== "semanal" && params.tipo !== "mensal") throw new ValidationError("Relatório inválido.");
+  const r = await metricsReport(db, actor, params.tipo, params, today);
   await audit(db, {
     actorId: actor.id,
     action: "EXPORT",
     entityType: "Report",
-    entityId: "semanal",
-    summary: `Relatório semanal ${weekLabel(data.weekStart)} exportado (${params.formato.toUpperCase()}, ${data.rows.length} colaboradores)`,
+    entityId: params.tipo,
+    summary: `Relatório ${params.tipo} ${metricsReportTitle(r)} exportado (${params.formato.toUpperCase()}, ${r.rows.length} colaboradores)`,
   });
-  return { ...data, scopeLabel: name ?? (params.categoria ? `Equipe ${params.categoria}` : "Toda a equipe"), generatedAt: new Date() };
+  return r;
+}
+
+/** Ocorrências do período da folha (20 → 19) que contém a data informada. */
+export async function occurrencesReport(db: Db, actor: Actor, date: Date): Promise<OccurrencesReport> {
+  const p = payrollPeriod(date);
+  return { ...(await occurrencesReportData(db, actor, p.from, p.to)), generatedAt: new Date() };
+}
+
+export async function buildOccurrencesReport(db: Db, actor: Actor, params: ReportParams, today: Date): Promise<OccurrencesReport> {
+  if (!can(actor, "reports:export")) throw new ForbiddenError();
+  const r = await occurrencesReport(db, actor, params.folha ?? params.de ?? today);
+  await audit(db, {
+    actorId: actor.id,
+    action: "EXPORT",
+    entityType: "Report",
+    entityId: "folha",
+    summary: `Relatório de ocorrências (${payrollLabel(r)}) exportado (${r.total} ocorrências)`,
+  });
+  return r;
 }
 
 export async function buildReport(db: Db, actor: Actor, params: ReportParams, today: Date): Promise<ReportData> {
   if (!can(actor, "reports:export")) throw new ForbiddenError();
-  if (params.tipo === "semanal") throw new ValidationError("Use buildWeeklyReport para o relatório semanal.");
+  if (params.tipo === "semanal" || params.tipo === "mensal" || params.tipo === "folha") throw new ValidationError("Use o gerador do relatório com layout próprio.");
   const report = await builders[params.tipo](db, actor, params, today);
   await audit(db, {
     actorId: actor.id,

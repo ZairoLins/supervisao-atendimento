@@ -81,10 +81,20 @@ A autorização é verificada no servidor em três pontos: página (`requirePerm
 
 ## Relatórios
 
-O **relatório semanal** (`modules/reports/weekly.ts`) tem layout próprio: PDF com cabeçalho preto e faixa azul, cartões de indicadores com variação em relação à semana anterior, gráfico de barras por colaborador, tabela com barra de avaliação e observações; Excel com faixa de título, indicadores, tabela formatada e barras de dados. Fica disponível em Relatórios, em Desempenho e na tela de lançamento da semana.
+Os relatórios **semanal e mensal de métricas** (`modules/reports/metrics-report.ts`) e o de **ocorrências da folha** (`modules/reports/occurrences-report.ts`, período de 20 a 19) compartilham a identidade visual de `modules/reports/brand.ts`. O semanal/mensal tem PDF com cabeçalho preto e faixa azul, cartões de indicadores com variação em relação à semana anterior, gráfico de barras por colaborador, tabela com barra de avaliação e observações; Excel com faixa de título, indicadores, tabela formatada e barras de dados. Fica disponível em Relatórios, em Desempenho e na tela de lançamento da semana.
 
 
 Gerados no servidor (`/api/relatorios`), com parâmetros validados por Zod, permissão do módulo de origem, cabeçalho, período, data de geração e totais. Células de texto que começam com `= + - @`, tabulação ou retorno recebem apóstrofo (proteção contra *formula injection*). Frequência nunca inclui observações restritas, anexos ou observações de tipos médicos; feedbacks exigem confirmação explícita e o conteúdo detalhado é opcional. Toda exportação é auditada.
+
+## WhatsApp (Evolution API)
+
+`modules/whatsapp/client.ts` fala com a Evolution API v2 que roda no mesmo servidor (docker, só em 127.0.0.1:8080): `sendText`, `sendMedia` (PDF em base64), `connectionState`, `fetchAllGroups` e `connect` (QR Code). A chave fica em `/etc/supervisao/supervisao.env` e nunca vai ao navegador nem aos logs.
+
+`modules/whatsapp/core.ts` guarda destinatários, registra cada envio em `OutboundMessage` e na auditoria, monta a pauta (Markdown convertido para a formatação do WhatsApp) e o aviso de reunião. `service.ts` acrescenta os envios ao gestor que geram PDF (ocorrências da folha e relatório mensal). O aviso automático roda fora do Next, em `scripts/send-reminders.ts`, chamado a cada 10 minutos pelo timer `supervisao-avisos`: reuniões **semanais** agendadas recebem um aviso quando faltam N horas (configurável), uma única vez (`Meeting.reminderSentAt`).
+
+## Kanban da semana
+
+`modules/kanban/service.ts`: cartões por semana (segunda-feira) em três colunas; mover renumera as colunas envolvidas; concluir grava `completedAt`; "trazer pendências" move para a semana atual o que ficou em A fazer/Fazendo nas semanas anteriores. O quadro usa arrastar e soltar (HTML5) com atualização otimista, e botões de seta como alternativa por teclado/toque.
 
 ## Design system
 

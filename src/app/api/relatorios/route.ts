@@ -4,8 +4,9 @@ import { env } from "@/lib/env";
 import { getCurrentActor } from "@/lib/auth/dal";
 import { todayInTimeZone, toDateKey } from "@/lib/dates";
 import { isAppError } from "@/lib/errors";
-import { buildReport, buildWeeklyReport, reportParamsSchema } from "@/modules/reports/service";
-import { renderWeeklyExcel, renderWeeklyPdf } from "@/modules/reports/weekly";
+import { buildMetricsReport, buildOccurrencesReport, buildReport, reportParamsSchema } from "@/modules/reports/service";
+import { metricsReportFileName, renderMetricsExcel, renderMetricsPdf } from "@/modules/reports/metrics-report";
+import { renderOccurrencesPdf } from "@/modules/reports/occurrences-report";
 import { renderExcel, renderPdf } from "@/modules/reports/render";
 
 export const runtime = "nodejs";
@@ -22,15 +23,26 @@ export async function GET(request: NextRequest) {
   }
   const tz = env().APP_TIMEZONE;
   try {
-    if (parsed.data.tipo === "semanal") {
-      const weekly = await buildWeeklyReport(db, actor, parsed.data, todayInTimeZone(tz));
-      const name = `relatorio-semanal-${toDateKey(weekly.weekStart)}`;
+    if (parsed.data.tipo === "semanal" || parsed.data.tipo === "mensal") {
+      const report = await buildMetricsReport(db, actor, parsed.data, todayInTimeZone(tz));
       const isPdf = parsed.data.formato === "pdf";
-      const buf = isPdf ? await renderWeeklyPdf(weekly, tz) : await renderWeeklyExcel(weekly, tz);
+      const buf = isPdf ? await renderMetricsPdf(report, tz) : await renderMetricsExcel(report, tz);
       return new NextResponse(new Uint8Array(buf), {
         headers: {
           "Content-Type": isPdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `${isPdf ? "inline" : "attachment"}; filename="${name}.${isPdf ? "pdf" : "xlsx"}"`,
+          "Content-Disposition": `${isPdf ? "inline" : "attachment"}; filename="${metricsReportFileName(report, isPdf ? "pdf" : "xlsx")}"`,
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
+    if (parsed.data.tipo === "folha") {
+      if (parsed.data.formato !== "pdf") return NextResponse.json({ error: "Este relatório é gerado em PDF." }, { status: 400 });
+      const report = await buildOccurrencesReport(db, actor, parsed.data, todayInTimeZone(tz));
+      const buf = await renderOccurrencesPdf(report, tz);
+      return new NextResponse(new Uint8Array(buf), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="ocorrencias-folha-${toDateKey(report.from)}.pdf"`,
           "Cache-Control": "private, no-store",
         },
       });

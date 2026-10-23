@@ -1,0 +1,56 @@
+# Evolution API (WhatsApp não oficial) para a Supervisão de Atendimento.
+# Instalada por deploy/instalar-whatsapp.sh em /opt/supervisao-whatsapp.
+# A API ouve SOMENTE em 127.0.0.1:8080 (acessada pela aplicação no mesmo servidor);
+# banco e cache ficam em rede interna, sem portas publicadas.
+name: supervisao-whatsapp
+
+services:
+  api:
+    image: evoapicloud/evolution-api:v2.3.7
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - /etc/supervisao/evolution.env
+    volumes:
+      - instances:/evolution/instances
+    networks:
+      - interna
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - /etc/supervisao/evolution.env
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    networks:
+      - interna
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis:/data
+    networks:
+      - interna
+
+volumes:
+  instances:
+  postgres:
+  redis:
+
+networks:
+  interna:
