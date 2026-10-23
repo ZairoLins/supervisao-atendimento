@@ -11,7 +11,7 @@ type Defaults = {
   weekdays?: number[];
   cycleDays?: number | null;
   workOffsets?: number[];
-  segments?: Array<{ startMinute: number; endMinute: number }>;
+  segments?: Array<{ startMinute: number; endMinute: number; weekday?: number | null }>;
   active?: boolean;
 };
 
@@ -27,8 +27,13 @@ export function ScheduleForm({
   locked?: boolean;
   isEdit?: boolean;
 }) {
+  const general = (defaults.segments ?? []).filter((s) => s.weekday === null || s.weekday === undefined);
   const seg = (i: number, k: "startMinute" | "endMinute") => {
-    const s = defaults.segments?.[i];
+    const s = general[i];
+    return s ? formatTime(s[k]) : "";
+  };
+  const day = (wd: number, k: "startMinute" | "endMinute") => {
+    const s = defaults.segments?.find((x) => x.weekday === wd);
     return s ? formatTime(s[k]) : "";
   };
   return (
@@ -73,6 +78,17 @@ export function ScheduleForm({
               <TextField name="end3" label="Fim 3" type="time" defaultValue={seg(2, "endMinute")} />
             </div>
             <p className="mt-2 text-xs text-subtle">Fim menor que o início indica término no dia seguinte (ex.: 19:00–07:00).</p>
+          </fieldset>
+          <fieldset className="rounded-xl bg-surface-2 p-4 md:col-span-2">
+            <legend className="sr-only">Horário diferente no fim de semana</legend>
+            <p className="mb-3 text-sm font-medium">Horário diferente no fim de semana (opcional, jornada semanal)</p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <TextField name="satStart" label="Sábado — início" type="time" defaultValue={day(6, "startMinute")} />
+              <TextField name="satEnd" label="Sábado — fim" type="time" defaultValue={day(6, "endMinute")} />
+              <TextField name="sunStart" label="Domingo — início" type="time" defaultValue={day(0, "startMinute")} />
+              <TextField name="sunEnd" label="Domingo — fim" type="time" defaultValue={day(0, "endMinute")} />
+            </div>
+            <p className="mt-2 text-xs text-subtle">Preencha para o dia ter um horário próprio (ex.: sábado 08:00–12:00). O dia passa a fazer parte da jornada automaticamente.</p>
           </fieldset>
         </>
       )}

@@ -81,6 +81,9 @@ A autorização é verificada no servidor em três pontos: página (`requirePerm
 
 ## Relatórios
 
+O **relatório semanal** (`modules/reports/weekly.ts`) tem layout próprio: PDF com cabeçalho preto e faixa azul, cartões de indicadores com variação em relação à semana anterior, gráfico de barras por colaborador, tabela com barra de avaliação e observações; Excel com faixa de título, indicadores, tabela formatada e barras de dados. Fica disponível em Relatórios, em Desempenho e na tela de lançamento da semana.
+
+
 Gerados no servidor (`/api/relatorios`), com parâmetros validados por Zod, permissão do módulo de origem, cabeçalho, período, data de geração e totais. Células de texto que começam com `= + - @`, tabulação ou retorno recebem apóstrofo (proteção contra *formula injection*). Frequência nunca inclui observações restritas, anexos ou observações de tipos médicos; feedbacks exigem confirmação explícita e o conteúdo detalhado é opcional. Toda exportação é auditada.
 
 ## Design system

@@ -8,6 +8,7 @@ import {
   mergeIntervals,
   planDay,
   planRange,
+  segmentsForDay,
   subtractIntervals,
   summarizeAttendance,
   validateSegments,
@@ -35,10 +36,22 @@ describe("jornadas padrão", () => {
     expect(s.plannedDays).toBe(1);
   });
 
-  it("funcionário não trabalha no fim de semana", () => {
+  it("funcionário trabalha sábado 08:00–12:00 e folga no domingo", () => {
+    const sat = planDay([assign(FUNC, "2026-01-01")], [], d("2026-10-17"));
+    expect(sat.planned.segments).toEqual([{ startMinute: 480, endMinute: 720 }]);
     const s = summarizeAttendance([assign(FUNC, "2026-01-01")], [], [], d("2026-10-17"), d("2026-10-18"));
-    expect(s.plannedMinutes).toBe(0);
-    expect(s.offDays).toBe(2);
+    expect(s.plannedMinutes).toBe(240);
+    expect(s.plannedDays).toBe(1);
+    expect(s.offDays).toBe(1);
+    // Semana completa: 5 × 8h + 4h
+    expect(summarizeAttendance([assign(FUNC, "2026-01-01")], [], [], d("2026-10-19"), d("2026-10-25")).plannedMinutes).toBe(5 * 480 + 240);
+  });
+
+  it("horário específico de um dia substitui os períodos comuns", () => {
+    const sched = { id: "x", name: "x", kind: "WEEKLY" as const, weekdays: [1, 2, 3, 4, 5], cycleDays: null, workOffsets: [], segments: [{ startMinute: 480, endMinute: 1020 }, { startMinute: 540, endMinute: 660, weekday: 0 }] };
+    expect(segmentsForDay(sched, d("2026-10-19"))).toEqual([{ startMinute: 480, endMinute: 1020 }]);
+    expect(segmentsForDay(sched, d("2026-10-18"))).toEqual([{ startMinute: 540, endMinute: 660 }]);
+    expect(segmentsForDay(sched, d("2026-10-17"))).toEqual([]);
   });
 
   it("estagiários de manhã e de tarde preveem 6h", () => {
@@ -166,7 +179,10 @@ describe("histórico de vigência", () => {
   it("usa a jornada vigente em cada data", () => {
     const hist = [assign(EST_MANHA, "2026-01-01", "2026-10-18"), assign(FUNC, "2026-10-19")];
     expect(planDay(hist, [], d("2026-10-16")).planned.segments).toEqual(EST_MANHA.segments);
-    expect(planDay(hist, [], d("2026-10-19")).planned.segments).toEqual(FUNC.segments);
+    expect(planDay(hist, [], d("2026-10-19")).planned.segments).toEqual([
+      { startMinute: 480, endMinute: 720 },
+      { startMinute: 840, endMinute: 1080 },
+    ]);
     const s = summarizeAttendance(hist, [], [], d("2026-10-16"), d("2026-10-19"));
     expect(s.plannedMinutes).toBe(360 + 480);
   });

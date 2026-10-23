@@ -2,18 +2,16 @@ import { z } from "zod";
 import type { Db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { audit } from "@/lib/audit";
-import { addMonths, dayNumber, eachDay, endOfMonth, formatDate, monthKey, monthRange, startOfMonth, toDateKey, todayInTimeZone } from "@/lib/dates";
+import { addDays, addMonths, dayNumber, endOfMonth, formatDate, monthKey, monthRange, startOfMonth, toDateKey, todayInTimeZone } from "@/lib/dates";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertCan, type Actor } from "@/lib/permissions";
 import { isUniqueViolation } from "@/lib/prisma-errors";
 import { formatCode } from "@/lib/text";
 import { dateField, decimalField, intField, optionalText, PAGE_SIZE, requiredText, uuidField } from "@/lib/validation";
-import { loadRules } from "@/modules/attendance/schedules";
-import { planDay } from "@/modules/attendance/rules";
 
 /**
- * Indicadores lançados por dia. As visões mensais (evolução, comparação, relatórios)
- * são agregadas a partir dos dias:
+ * Indicadores lançados por semana (segunda a domingo), tipicamente às sextas-feiras.
+ * Uma semana pertence ao mês/período da sua sexta-feira. Agregações:
  *   chamados = soma · tempo médio e avaliação = média ponderada pelo volume de chamados
  *   (média simples quando não há chamados).
  */
@@ -22,38 +20,60 @@ function appToday(): Date {
   return todayInTimeZone(process.env.APP_TIMEZONE || "America/Sao_Paulo");
 }
 
+/** Segunda-feira da semana de uma data. */
+export function weekStartOf(date: Date): Date {
+  const wd = date.getUTCDay(); // 0 = domingo
+  return addDays(date, wd === 0 ? -6 : 1 - wd);
+}
+
+/** Sexta-feira da semana (define a qual mês/período a semana pertence). */
+export function fridayOf(weekStart: Date): Date {
+  return addDays(weekStart, 4);
+}
+
+export function weekLabel(weekStart: Date): string {
+  return `${formatDate(weekStart).slice(0, 5)} a ${formatDate(addDays(weekStart, 6))}`;
+}
+
+/** Filtro de semanas cuja sexta-feira cai em [from, to]. */
+function weeksWhere(from: Date, to: Date): Prisma.DateTimeFilter {
+  return { gte: addDays(from, -4), lte: addDays(to, -4) };
+}
+
 const values = {
-  ticketsHandled: intField("a quantidade de chamados", 0, 100_000),
+  ticketsHandled: intField("a quantidade de chamados", 0, 1_000_000),
   avgHandleMinutes: decimalField("o tempo médio (min)", 0, 100_000),
   avgRating: decimalField("a avaliação média", 0, 10),
   notes: optionalText(1000),
 };
 
-export const metricSchema = z.object({ employeeId: uuidField("o colaborador"), date: dateField(), ...values });
+/** `week` aceita qualquer data da semana; é normalizada para a segunda-feira. */
+export const metricSchema = z.object({ employeeId: uuidField("o colaborador"), week: dateField("a semana"), ...values });
 
-function assertNotFuture(date: Date, today: Date) {
-  if (dayNumber(date) > dayNumber(today)) throw new ValidationError("Não é possível lançar métricas de datas futuras.", { date: "Data futura." });
+function assertNotFuture(weekStart: Date, today: Date) {
+  if (dayNumber(weekStart) > dayNumber(today)) throw new ValidationError("Não é possível lançar métricas de semanas futuras.", { week: "Semana futura." });
 }
 
-/** Lançamento individual de um dia (o mesmo colaborador não pode ter dois lançamentos no dia). */
+/** Lançamento individual de uma semana (um por colaborador e semana). */
 export async function createMetric(db: Db, actor: Actor, raw: unknown, today: Date = appToday()) {
   assertCan(actor, "metrics:write");
-  const v = metricSchema.parse(raw);
-  assertNotFuture(v.date, today);
+  const { week, ...v } = metricSchema.parse(raw);
+  const weekStart = weekStartOf(week);
+  assertNotFuture(weekStart, today);
   const employee = await db.employee.findUnique({ where: { id: v.employeeId } });
   if (!employee) throw new NotFoundError("Colaborador não encontrado.");
-  const existing = await db.dailyMetric.findUnique({ where: { employeeId_date: { employeeId: v.employeeId, date: v.date } } });
+  const existing = await db.weeklyMetric.findUnique({ where: { employeeId_weekStart: { employeeId: v.employeeId, weekStart } } });
   if (existing) {
-    throw new ConflictError(`Já existe lançamento de ${formatDate(v.date)} para este colaborador. Corrija o lançamento existente.`, { date: "Dia já lançado." });
+    throw new ConflictError(`Já existe lançamento da semana ${weekLabel(weekStart)} para este colaborador. Corrija o lançamento existente.`, { week: "Semana já lançada." });
   }
   try {
     return await db.$transaction(async (tx) => {
-      const m = await tx.dailyMetric.create({ data: { ...v, notes: v.notes ?? null, jobTitleSnapshot: employee.jobTitle, teamSnapshot: employee.team } });
-      await audit(tx, { actorId: actor.id, action: "CREATE", entityType: "DailyMetric", entityId: m.id, summary: `Métricas de ${formatDate(v.date)} lançadas para ${formatCode("employee", employee.code)}`, after: m });
+      const m = await tx.weeklyMetric.create({ data: { ...v, weekStart, notes: v.notes ?? null, jobTitleSnapshot: employee.jobTitle, teamSnapshot: employee.team } });
+      await audit(tx, { actorId: actor.id, action: "CREATE", entityType: "WeeklyMetric", entityId: m.id, summary: `Métricas da semana ${weekLabel(weekStart)} lançadas para ${formatCode("employee", employee.code)}`, after: m });
       return m;
     });
   } catch (e) {
-    if (isUniqueViolation(e)) throw new ConflictError("Já existe lançamento para este colaborador neste dia.", { date: "Dia já lançado." });
+    if (isUniqueViolation(e)) throw new ConflictError("Já existe lançamento para este colaborador nesta semana.", { week: "Semana já lançada." });
     throw e;
   }
 }
@@ -61,14 +81,15 @@ export async function createMetric(db: Db, actor: Actor, raw: unknown, today: Da
 type RowInput = { ticketsHandled?: string; avgHandleMinutes?: string; avgRating?: string; notes?: string };
 
 /**
- * Lançamento do dia para toda a equipe de uma vez. O formulário envia, por colaborador,
+ * Lançamento da semana para toda a equipe de uma vez. O formulário envia, por colaborador,
  * os campos t_<id>, a_<id>, r_<id> e n_<id>. Linhas totalmente vazias são ignoradas.
  * Valores alterados em lançamentos já existentes geram revisão (o valor anterior é preservado).
  */
-export async function saveDailyBatch(db: Db, actor: Actor, raw: Record<string, unknown>, today: Date = appToday()) {
+export async function saveWeeklyBatch(db: Db, actor: Actor, raw: Record<string, unknown>, today: Date = appToday()) {
   assertCan(actor, "metrics:write");
-  const { date } = z.object({ date: dateField() }).parse(raw);
-  assertNotFuture(date, today);
+  const { week } = z.object({ week: dateField("a semana") }).parse(raw);
+  const weekStart = weekStartOf(week);
+  assertNotFuture(weekStart, today);
 
   const rows = new Map<string, RowInput>();
   for (const [key, value] of Object.entries(raw)) {
@@ -102,7 +123,7 @@ export async function saveDailyBatch(db: Db, actor: Actor, raw: Record<string, u
   return db.$transaction(async (tx) => {
     const employees = await tx.employee.findMany({ where: { id: { in: parsed.map((p) => p.employeeId) } } });
     const byId = new Map(employees.map((e) => [e.id, e]));
-    const existing = await tx.dailyMetric.findMany({ where: { date, employeeId: { in: parsed.map((p) => p.employeeId) } } });
+    const existing = await tx.weeklyMetric.findMany({ where: { weekStart, employeeId: { in: parsed.map((p) => p.employeeId) } } });
     const existingBy = new Map(existing.map((e) => [e.employeeId, e]));
     let created = 0;
     let updated = 0;
@@ -113,8 +134,8 @@ export async function saveDailyBatch(db: Db, actor: Actor, raw: Record<string, u
       const data = { ticketsHandled: p.ticketsHandled, avgHandleMinutes: p.avgHandleMinutes, avgRating: p.avgRating, notes: p.notes ?? null };
       const before = existingBy.get(p.employeeId);
       if (!before) {
-        const m = await tx.dailyMetric.create({ data: { ...data, employeeId: p.employeeId, date, jobTitleSnapshot: emp.jobTitle, teamSnapshot: emp.team } });
-        await audit(tx, { actorId: actor.id, action: "CREATE", entityType: "DailyMetric", entityId: m.id, summary: `Métricas de ${formatDate(date)} lançadas para ${formatCode("employee", emp.code)}`, after: m });
+        const m = await tx.weeklyMetric.create({ data: { ...data, employeeId: p.employeeId, weekStart, jobTitleSnapshot: emp.jobTitle, teamSnapshot: emp.team } });
+        await audit(tx, { actorId: actor.id, action: "CREATE", entityType: "WeeklyMetric", entityId: m.id, summary: `Métricas da semana ${weekLabel(weekStart)} lançadas para ${formatCode("employee", emp.code)}`, after: m });
         created++;
         continue;
       }
@@ -127,33 +148,33 @@ export async function saveDailyBatch(db: Db, actor: Actor, raw: Record<string, u
         unchanged++;
         continue;
       }
-      await tx.dailyMetricRevision.create({
+      await tx.weeklyMetricRevision.create({
         data: {
           metricId: before.id,
           ticketsHandled: before.ticketsHandled,
           avgHandleMinutes: before.avgHandleMinutes,
           avgRating: before.avgRating,
           notes: before.notes,
-          reason: "Ajuste no lançamento do dia",
+          reason: "Ajuste no lançamento da semana",
           changedById: actor.id,
         },
       });
-      const after = await tx.dailyMetric.update({ where: { id: before.id }, data });
-      await audit(tx, { actorId: actor.id, action: "CORRECT", entityType: "DailyMetric", entityId: before.id, summary: `Métricas de ${formatDate(date)} ajustadas`, before, after, reason: "Ajuste no lançamento do dia" });
+      const after = await tx.weeklyMetric.update({ where: { id: before.id }, data });
+      await audit(tx, { actorId: actor.id, action: "CORRECT", entityType: "WeeklyMetric", entityId: before.id, summary: `Métricas da semana ${weekLabel(weekStart)} ajustadas`, before, after, reason: "Ajuste no lançamento da semana" });
       updated++;
     }
-    return { created, updated, unchanged };
+    return { created, updated, unchanged, weekStart };
   });
 }
 
 const correctionSchema = z.object({ ...values, reason: requiredText("o motivo da correção", 500) });
 
-/** Corrige um lançamento guardando os valores anteriores em DailyMetricRevision. */
+/** Corrige um lançamento guardando os valores anteriores em WeeklyMetricRevision. */
 export async function correctMetric(db: Db, actor: Actor, id: string, raw: unknown) {
   assertCan(actor, "metrics:write");
   const v = correctionSchema.parse(raw);
   return db.$transaction(async (tx) => {
-    const before = await tx.dailyMetric.findUnique({ where: { id } });
+    const before = await tx.weeklyMetric.findUnique({ where: { id } });
     if (!before) throw new NotFoundError("Lançamento não encontrado.");
     const unchanged =
       before.ticketsHandled === v.ticketsHandled &&
@@ -161,21 +182,21 @@ export async function correctMetric(db: Db, actor: Actor, id: string, raw: unkno
       Number(before.avgRating) === v.avgRating &&
       (before.notes ?? null) === (v.notes ?? null);
     if (unchanged) throw new ValidationError("Nenhum valor foi alterado.");
-    await tx.dailyMetricRevision.create({
+    await tx.weeklyMetricRevision.create({
       data: { metricId: id, ticketsHandled: before.ticketsHandled, avgHandleMinutes: before.avgHandleMinutes, avgRating: before.avgRating, notes: before.notes, reason: v.reason, changedById: actor.id },
     });
-    const after = await tx.dailyMetric.update({
+    const after = await tx.weeklyMetric.update({
       where: { id },
       data: { ticketsHandled: v.ticketsHandled, avgHandleMinutes: v.avgHandleMinutes, avgRating: v.avgRating, notes: v.notes ?? null },
     });
-    await audit(tx, { actorId: actor.id, action: "CORRECT", entityType: "DailyMetric", entityId: id, summary: `Métricas de ${formatDate(before.date)} corrigidas`, before, after, reason: v.reason });
+    await audit(tx, { actorId: actor.id, action: "CORRECT", entityType: "WeeklyMetric", entityId: id, summary: `Métricas da semana ${weekLabel(before.weekStart)} corrigidas`, before, after, reason: v.reason });
     return after;
   });
 }
 
 export async function getMetric(db: Db, actor: Actor, id: string) {
   assertCan(actor, "metrics:read");
-  const m = await db.dailyMetric.findUnique({
+  const m = await db.weeklyMetric.findUnique({
     where: { id },
     include: { employee: { select: { id: true, fullName: true, code: true } }, revisions: { orderBy: { createdAt: "desc" } } },
   });
@@ -189,12 +210,12 @@ export async function listMetrics(
   f: { employeeId?: string; from?: Date; to?: Date; team?: string; page?: number; sort?: string; dir?: "asc" | "desc" },
 ) {
   assertCan(actor, "metrics:read");
-  const where: Prisma.DailyMetricWhereInput = {};
+  const where: Prisma.WeeklyMetricWhereInput = {};
   if (f.employeeId) where.employeeId = f.employeeId;
   if (f.team) where.teamSnapshot = f.team;
-  if (f.from || f.to) where.date = { ...(f.from ? { gte: f.from } : {}), ...(f.to ? { lte: f.to } : {}) };
+  if (f.from && f.to) where.weekStart = weeksWhere(f.from, f.to);
   const dir = f.dir ?? "desc";
-  const orderBy: Prisma.DailyMetricOrderByWithRelationInput[] =
+  const orderBy: Prisma.WeeklyMetricOrderByWithRelationInput[] =
     f.sort === "tickets"
       ? [{ ticketsHandled: dir }]
       : f.sort === "rating"
@@ -203,11 +224,11 @@ export async function listMetrics(
           ? [{ avgHandleMinutes: dir }]
           : f.sort === "employee"
             ? [{ employee: { fullName: dir } }]
-            : [{ date: dir }, { employee: { fullName: "asc" } }];
+            : [{ weekStart: dir }, { employee: { fullName: "asc" } }];
   const page = f.page ?? 1;
   const [total, items] = await Promise.all([
-    db.dailyMetric.count({ where }),
-    db.dailyMetric.findMany({
+    db.weeklyMetric.count({ where }),
+    db.weeklyMetric.findMany({
       where,
       include: { employee: { select: { id: true, fullName: true, code: true } }, _count: { select: { revisions: true } } },
       orderBy,
@@ -218,31 +239,25 @@ export async function listMetrics(
   return { total, items, page, pageCount: Math.ceil(total / PAGE_SIZE) };
 }
 
-/** Dados do formulário de lançamento do dia: equipe ativa + lançamentos já existentes na data. */
-export async function dailyBatchData(db: Db, actor: Actor, date: Date) {
+/** Dados do formulário de lançamento da semana: equipe ativa + lançamentos já existentes. */
+export async function weeklyBatchData(db: Db, actor: Actor, weekStart: Date) {
   assertCan(actor, "metrics:read");
   const [employees, entries] = await Promise.all([
     db.employee.findMany({
-      where: { status: { not: "INACTIVE" }, startDate: { lte: date } },
+      where: { status: { not: "INACTIVE" }, startDate: { lte: addDays(weekStart, 6) } },
       select: { id: true, fullName: true, code: true, jobTitle: true, team: true, status: true },
       orderBy: [{ team: "asc" }, { fullName: "asc" }],
     }),
-    db.dailyMetric.findMany({ where: { date } }),
+    db.weeklyMetric.findMany({ where: { weekStart } }),
   ]);
   const byEmployee = new Map(entries.map((e) => [e.employeeId, e]));
-  const rows = [];
-  for (const e of employees) {
-    const rules = await loadRules(db, e.id);
-    const plan = planDay(rules.assignments, rules.adjustments, date);
-    rows.push({ employee: e, metric: byEmployee.get(e.id) ?? null, scheduled: rules.assignments.length === 0 ? null : plan.effective.isWorkDay });
-  }
-  return rows;
+  return employees.map((e) => ({ employee: e, metric: byEmployee.get(e.id) ?? null }));
 }
 
 // ───────────── Séries e agregações ─────────────
 
 export type SeriesPoint = {
-  /** AAAA-MM (série mensal) ou AAAA-MM-DD (série diária) */
+  /** AAAA-MM (série mensal) ou AAAA-MM-DD (segunda-feira da semana) */
   month: string;
   tickets: number | null;
   aht: number | null;
@@ -273,7 +288,7 @@ export function combine(rows: Row[]): { tickets: number | null; aht: number | nu
 
 type Scope = { employeeId?: string; team?: string; jobTitle?: string };
 
-function scopeWhere(s: Scope): Prisma.DailyMetricWhereInput {
+function scopeWhere(s: Scope): Prisma.WeeklyMetricWhereInput {
   return {
     ...(s.employeeId ? { employeeId: s.employeeId } : {}),
     ...(s.team ? { teamSnapshot: s.team } : {}),
@@ -281,47 +296,47 @@ function scopeWhere(s: Scope): Prisma.DailyMetricWhereInput {
   };
 }
 
-/** Série mensal (meses sem lançamento ficam nulos — nunca zero). */
+/** Série mensal (semana conta no mês da sua sexta-feira; meses vazios ficam nulos). */
 export async function metricSeries(db: Db, actor: Actor, opts: { months: number; end?: Date } & Scope): Promise<SeriesPoint[]> {
   assertCan(actor, "metrics:read");
   const end = startOfMonth(opts.end ?? appToday());
   const start = addMonths(end, -(opts.months - 1));
-  const rows = await db.dailyMetric.findMany({
-    where: { date: { gte: start, lte: endOfMonth(end) }, ...scopeWhere(opts) },
-    select: { date: true, ticketsHandled: true, avgHandleMinutes: true, avgRating: true },
+  const rows = await db.weeklyMetric.findMany({
+    where: { weekStart: weeksWhere(start, endOfMonth(end)), ...scopeWhere(opts) },
+    select: { weekStart: true, ticketsHandled: true, avgHandleMinutes: true, avgRating: true },
   });
   return monthRange(start, end).map((m) => {
     const key = monthKey(m);
-    return { month: key, ...combine(rows.filter((r) => monthKey(r.date) === key)) };
+    return { month: key, ...combine(rows.filter((r) => monthKey(fridayOf(r.weekStart)) === key)) };
   });
 }
 
-/** Série diária de um mês (dias sem lançamento ficam nulos). */
-export async function dailySeries(db: Db, actor: Actor, opts: { month: Date } & Scope): Promise<SeriesPoint[]> {
+/** Série semanal: as últimas N semanas até a semana de `end` (semanas vazias ficam nulas). */
+export async function weeklySeries(db: Db, actor: Actor, opts: { weeks: number; end?: Date } & Scope): Promise<SeriesPoint[]> {
   assertCan(actor, "metrics:read");
-  const from = startOfMonth(opts.month);
-  const to = endOfMonth(opts.month);
-  const rows = await db.dailyMetric.findMany({
-    where: { date: { gte: from, lte: to }, ...scopeWhere(opts) },
-    select: { date: true, ticketsHandled: true, avgHandleMinutes: true, avgRating: true },
+  const last = weekStartOf(opts.end ?? appToday());
+  const first = addDays(last, -7 * (opts.weeks - 1));
+  const rows = await db.weeklyMetric.findMany({
+    where: { weekStart: { gte: first, lte: last }, ...scopeWhere(opts) },
+    select: { weekStart: true, ticketsHandled: true, avgHandleMinutes: true, avgRating: true },
   });
-  return eachDay(from, to).map((d) => {
-    const key = toDateKey(d);
-    return { month: key, ...combine(rows.filter((r) => toDateKey(r.date) === key)) };
+  return Array.from({ length: opts.weeks }, (_, i) => {
+    const ws = addDays(first, 7 * i);
+    const key = toDateKey(ws);
+    return { month: key, ...combine(rows.filter((r) => toDateKey(r.weekStart) === key)) };
   });
 }
 
 export type PeriodAggregate = { tickets: number | null; aht: number | null; rating: number | null; months: number };
 
-/** Agregado de um período a partir dos lançamentos diários. */
+/** Agregado das semanas cuja sexta-feira cai no período. */
 export async function periodAggregate(db: Db, actor: Actor, opts: { from: Date; to: Date } & Scope) {
   assertCan(actor, "metrics:read");
-  const rows = await db.dailyMetric.findMany({
-    where: { date: { gte: opts.from, lte: opts.to }, ...scopeWhere(opts) },
-    select: { date: true, ticketsHandled: true, avgHandleMinutes: true, avgRating: true },
+  const rows = await db.weeklyMetric.findMany({
+    where: { weekStart: weeksWhere(opts.from, opts.to), ...scopeWhere(opts) },
+    select: { weekStart: true, ticketsHandled: true, avgHandleMinutes: true, avgRating: true },
   });
-  const c = combine(rows);
-  return { ...c, days: new Set(rows.map((r) => toDateKey(r.date))).size };
+  return { ...combine(rows), weeks: new Set(rows.map((r) => toDateKey(r.weekStart))).size };
 }
 
 /** Agrega pontos de uma série (para totais do período). */
@@ -333,27 +348,70 @@ export function aggregate(points: SeriesPoint[]): PeriodAggregate {
 }
 
 /**
- * Comparação entre colaboradores em contexto equivalente (mesma função e equipe) dentro
- * de um mês. Valores lado a lado, sem ranking nem classificação.
+ * Comparação entre colaboradores em contexto equivalente (mesma função e equipe) em um
+ * mês. Valores lado a lado, sem ranking nem classificação.
  */
 export async function peerComparison(db: Db, actor: Actor, opts: { month: Date; team?: string; jobTitle?: string }) {
   assertCan(actor, "metrics:read");
-  const rows = await db.dailyMetric.findMany({
-    where: { date: { gte: startOfMonth(opts.month), lte: endOfMonth(opts.month) }, ...scopeWhere(opts) },
+  const rows = await db.weeklyMetric.findMany({
+    where: { weekStart: weeksWhere(startOfMonth(opts.month), endOfMonth(opts.month)), ...scopeWhere(opts) },
     include: { employee: { select: { id: true, fullName: true, code: true } } },
   });
   const byEmployee = new Map<string, typeof rows>();
   for (const r of rows) byEmployee.set(r.employeeId, [...(byEmployee.get(r.employeeId) ?? []), r]);
   return [...byEmployee.values()]
-    .map((list) => ({ employee: list[0].employee, jobTitle: list[0].jobTitleSnapshot, team: list[0].teamSnapshot, days: list.length, ...combine(list) }))
+    .map((list) => ({ employee: list[0].employee, jobTitle: list[0].jobTitleSnapshot, team: list[0].teamSnapshot, weeks: list.length, ...combine(list) }))
     .sort((a, b) => a.employee.fullName.localeCompare(b.employee.fullName, "pt-BR"));
 }
 
-/** Colaboradores ativos com turno previsto na data e sem lançamento do dia. */
-export async function employeesWithoutMetric(db: Db, actor: Actor, date: Date) {
+/** Colaboradores ativos sem lançamento na semana informada. */
+export async function employeesWithoutMetric(db: Db, actor: Actor, weekStart: Date) {
   assertCan(actor, "metrics:read");
-  const rows = await dailyBatchData(db, actor, date);
-  return rows
-    .filter((r) => r.employee.status === "ACTIVE" && r.metric === null && r.scheduled === true)
-    .map((r) => ({ id: r.employee.id, fullName: r.employee.fullName, code: r.employee.code }));
+  const rows = await weeklyBatchData(db, actor, weekStart);
+  return rows.filter((r) => r.employee.status === "ACTIVE" && r.metric === null).map((r) => ({ id: r.employee.id, fullName: r.employee.fullName, code: r.employee.code }));
+}
+
+// ───────────── Relatório semanal ─────────────
+
+export type WeeklyReportRow = {
+  employeeId: string;
+  code: number;
+  name: string;
+  team: string;
+  jobTitle: string;
+  tickets: number;
+  aht: number;
+  rating: number;
+  notes: string | null;
+  prev: { tickets: number; aht: number; rating: number } | null;
+};
+
+/** Dados do relatório de uma semana, com comparação à semana anterior. */
+export async function weeklyReportData(db: Db, actor: Actor, week: Date, scope: Scope = {}) {
+  assertCan(actor, "metrics:read");
+  const weekStart = weekStartOf(week);
+  const prevStart = addDays(weekStart, -7);
+  const [current, previous] = await Promise.all([
+    db.weeklyMetric.findMany({ where: { weekStart, ...scopeWhere(scope) }, include: { employee: { select: { fullName: true, code: true } } } }),
+    db.weeklyMetric.findMany({ where: { weekStart: prevStart, ...scopeWhere(scope) } }),
+  ]);
+  const prevBy = new Map(previous.map((p) => [p.employeeId, p]));
+  const rows: WeeklyReportRow[] = current
+    .map((m) => {
+      const p = prevBy.get(m.employeeId);
+      return {
+        employeeId: m.employeeId,
+        code: m.employee.code,
+        name: m.employee.fullName,
+        team: m.teamSnapshot,
+        jobTitle: m.jobTitleSnapshot,
+        tickets: m.ticketsHandled,
+        aht: Number(m.avgHandleMinutes),
+        rating: Number(m.avgRating),
+        notes: m.notes,
+        prev: p ? { tickets: p.ticketsHandled, aht: Number(p.avgHandleMinutes), rating: Number(p.avgRating) } : null,
+      };
+    })
+    .sort((a, b) => a.team.localeCompare(b.team, "pt-BR") || a.name.localeCompare(b.name, "pt-BR"));
+  return { weekStart, weekEnd: addDays(weekStart, 6), rows, total: combine(current), previousTotal: combine(previous) };
 }

@@ -4,7 +4,8 @@ import { env } from "@/lib/env";
 import { getCurrentActor } from "@/lib/auth/dal";
 import { todayInTimeZone, toDateKey } from "@/lib/dates";
 import { isAppError } from "@/lib/errors";
-import { buildReport, reportParamsSchema } from "@/modules/reports/service";
+import { buildReport, buildWeeklyReport, reportParamsSchema } from "@/modules/reports/service";
+import { renderWeeklyExcel, renderWeeklyPdf } from "@/modules/reports/weekly";
 import { renderExcel, renderPdf } from "@/modules/reports/render";
 
 export const runtime = "nodejs";
@@ -21,6 +22,19 @@ export async function GET(request: NextRequest) {
   }
   const tz = env().APP_TIMEZONE;
   try {
+    if (parsed.data.tipo === "semanal") {
+      const weekly = await buildWeeklyReport(db, actor, parsed.data, todayInTimeZone(tz));
+      const name = `relatorio-semanal-${toDateKey(weekly.weekStart)}`;
+      const isPdf = parsed.data.formato === "pdf";
+      const buf = isPdf ? await renderWeeklyPdf(weekly, tz) : await renderWeeklyExcel(weekly, tz);
+      return new NextResponse(new Uint8Array(buf), {
+        headers: {
+          "Content-Type": isPdf ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `${isPdf ? "inline" : "attachment"}; filename="${name}.${isPdf ? "pdf" : "xlsx"}"`,
+          "Cache-Control": "private, no-store",
+        },
+      });
+    }
     const report = await buildReport(db, actor, parsed.data, todayInTimeZone(tz));
     const fileBase = `${parsed.data.tipo}-${toDateKey(todayInTimeZone(tz))}`;
     if (parsed.data.formato === "xlsx") {

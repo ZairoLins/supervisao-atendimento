@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
 import { ValidationError } from "@/lib/errors";
-import { assignSchedule, createAdjustment, createSchedule, endAssignment, revokeAdjustment, updateSchedule } from "./schedules";
+import { assignSchedule, createAdjustment, createSchedule, deleteAssignment, endAssignment, revokeAdjustment, updateSchedule } from "./schedules";
 import {
   addAttachment,
   createOccurrence,
@@ -90,6 +90,13 @@ export async function endAssignmentAction(id: string, _: ActionState, fd: FormDa
   return runAction(fd, async (actor) => {
     await endAssignment(db, actor, id, formToObject(fd));
     return { message: "Vigência encerrada.", revalidate: ["/frequencia"] };
+  });
+}
+
+export async function deleteAssignmentAction(id: string, _: ActionState, fd: FormData) {
+  return runAction(fd, async (actor) => {
+    const r = await deleteAssignment(db, actor, id);
+    return { message: r.reopened ? "Vigência excluída. A jornada anterior voltou a valer." : "Vigência excluída.", revalidate: ["/frequencia", `/colaboradores/${r.employeeId}`] };
   });
 }
 

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@/lib/errors";
 import { parseDateKey as d, toDateKey } from "@/lib/dates";
-import { assignSchedule, createAdjustment, createSchedule, revokeAdjustment, updateSchedule } from "@/modules/attendance/schedules";
+import { assignSchedule, createAdjustment, createSchedule, deleteAssignment, revokeAdjustment, updateSchedule } from "@/modules/attendance/schedules";
 import {
   addAttachment,
   createOccurrence,
@@ -48,6 +48,34 @@ describe.skipIf(!hasTestDb)("jornadas, escalas e ocorrências (banco)", () => {
     expect(s.plannedMinutes).toBe(360 + 480);
     // Não permite vigência anterior a uma existente
     await expect(assignSchedule(testDb(), sup, { employeeId: e.id, scheduleId: manha.id, validFrom: "2026-05-01" })).rejects.toThrow(AppError);
+  });
+
+  it("exclui vigência lançada por engano e reabre a anterior", async () => {
+    const sup = await createUser();
+    const e = await makeEmployee(sup);
+    const manha = await scheduleByName("Estagiário manhã");
+    const func = await scheduleByName("Funcionário");
+    const first = await assignSchedule(testDb(), sup, { employeeId: e.id, scheduleId: manha.id, validFrom: "2026-01-01" });
+    const wrong = await assignSchedule(testDb(), sup, { employeeId: e.id, scheduleId: func.id, validFrom: "2026-10-19" });
+    const r = await deleteAssignment(testDb(), sup, wrong.id);
+    expect(r.reopened).toBe(true);
+    const list = await testDb().employeeScheduleAssignment.findMany({ where: { employeeId: e.id } });
+    expect(list.map((a) => a.id)).toEqual([first.id]);
+    expect(list[0].validTo).toBeNull();
+    expect(await testDb().auditLog.count({ where: { action: "DELETE_SCHEDULE" } })).toBe(1);
+    // Excluir a única vigência deixa o colaborador sem jornada
+    const r2 = await deleteAssignment(testDb(), sup, first.id);
+    expect(r2.reopened).toBe(false);
+    expect(await testDb().employeeScheduleAssignment.count({ where: { employeeId: e.id } })).toBe(0);
+  });
+
+  it("jornada com horário de sábado criada pelo formulário", async () => {
+    const sup = await createUser();
+    const s = await createSchedule(testDb(), sup, { name: "Seg–Sex + sábado", kind: "WEEKLY", weekdays: ["1", "2", "3", "4", "5"], start1: "09:00", end1: "18:00", satStart: "09:00", satEnd: "13:00" });
+    const full = await testDb().workSchedule.findUniqueOrThrow({ where: { id: s.id }, include: { segments: true } });
+    expect(full.weekdays).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(full.segments.find((x) => x.weekday === 6)).toMatchObject({ startMinute: 540, endMinute: 780 });
+    await expect(createSchedule(testDb(), sup, { name: "Ruim2", kind: "WEEKLY", weekdays: ["1"], start1: "09:00", end1: "18:00", satStart: "09:00" })).rejects.toThrow(/incompleto|horário específico/);
   });
 
   it("não altera horários de jornada já atribuída (histórico preservado)", async () => {

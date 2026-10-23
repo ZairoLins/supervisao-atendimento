@@ -2,11 +2,11 @@
 
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
-import { correctMetric, saveDailyBatch } from "./service";
+import { correctMetric, saveWeeklyBatch } from "./service";
 
-export async function saveDailyBatchAction(_: ActionState, fd: FormData) {
+export async function saveWeeklyBatchAction(_: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
-    const r = await saveDailyBatch(db, actor, formToObject(fd));
+    const r = await saveWeeklyBatch(db, actor, formToObject(fd));
     const parts = [r.created && `${r.created} novo(s)`, r.updated && `${r.updated} ajustado(s)`, r.unchanged && `${r.unchanged} sem alteração`].filter(Boolean);
     return { message: `Lançamentos salvos: ${parts.join(", ")}.`, revalidate: ["/desempenho", "/"] };
   });

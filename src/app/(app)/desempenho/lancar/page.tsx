@@ -1,67 +1,81 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
+import { can } from "@/lib/permissions";
 import { today } from "@/lib/page";
-import { addDays, dayNumber, formatDate, formatWeekday, toDateKey } from "@/lib/dates";
+import { addDays, dayNumber, formatDate, toDateKey } from "@/lib/dates";
 import { readParams, safeDateParam } from "@/lib/validation";
-import { dailyBatchData } from "@/modules/metrics/service";
-import { saveDailyBatchAction } from "@/modules/metrics/actions";
+import { weekLabel, weekStartOf, weeklyBatchData } from "@/modules/metrics/service";
+import { saveWeeklyBatchAction } from "@/modules/metrics/actions";
 import { ActionForm, FormMessage, Hidden, SubmitButton } from "@/components/ui/form";
 import { Badge, EmptyState, PageHeader, Panel } from "@/components/ui/primitives";
 import { BatchInput } from "./batch-input";
 
-export const metadata: Metadata = { title: "Lançar métricas do dia" };
+export const metadata: Metadata = { title: "Lançar métricas da semana" };
 
-export default async function DailyMetricsPage(props: PageProps<"/desempenho/lancar">) {
+export default async function WeeklyMetricsPage(props: PageProps<"/desempenho/lancar">) {
   const actor = await requirePermission("metrics:write");
   const params = readParams(await props.searchParams);
   const t = today();
-  let date = safeDateParam(params.data) ?? t;
-  if (dayNumber(date) > dayNumber(t)) date = t;
-  const rows = await dailyBatchData(db, actor, date);
-  const key = toDateKey(date);
+  const currentWeek = weekStartOf(t);
+  let weekStart = weekStartOf(safeDateParam(params.semana) ?? t);
+  if (dayNumber(weekStart) > dayNumber(currentWeek)) weekStart = currentWeek;
+  const rows = await weeklyBatchData(db, actor, weekStart);
+  const key = toDateKey(weekStart);
   const filled = rows.filter((r) => r.metric).length;
-  const isToday = dayNumber(date) === dayNumber(t);
+  const isCurrent = dayNumber(weekStart) === dayNumber(currentWeek);
+  const nav = (ws: Date) => `/desempenho/lancar?semana=${toDateKey(ws)}`;
 
   return (
     <>
       <PageHeader
         eyebrow="Desempenho"
-        title="Lançar métricas do dia"
-        description="Preencha os indicadores de cada colaborador. Linhas em branco são ignoradas; ao alterar um lançamento existente, o valor anterior fica guardado no histórico."
-        actions={<Link href="/desempenho" className="btn btn-secondary">Ver desempenho</Link>}
+        title="Lançar métricas da semana"
+        description="Preencha os indicadores da semana de cada colaborador (por exemplo, toda sexta-feira). Linhas em branco são ignoradas; ao alterar um lançamento existente, o valor anterior fica guardado."
+        actions={
+          <>
+            {can(actor, "reports:export") && filled > 0 ? (
+              <a href={`/api/relatorios?tipo=semanal&formato=pdf&semana=${key}`} target="_blank" rel="noopener" className="btn btn-secondary">
+                <FileDown className="size-4" aria-hidden /> Relatório da semana (PDF)
+              </a>
+            ) : null}
+            <Link href="/desempenho" className="btn btn-secondary">Ver desempenho</Link>
+          </>
+        }
       />
 
       <Panel>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Link href={`/desempenho/lancar?data=${toDateKey(addDays(date, -1))}`} className="btn btn-secondary btn-sm px-2" aria-label="Dia anterior">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={nav(addDays(weekStart, -7))} className="btn btn-secondary btn-sm px-2" aria-label="Semana anterior">
               <ChevronLeft className="size-4" aria-hidden />
             </Link>
-            <form method="get" className="flex items-center gap-2">
-              <label htmlFor="l-data" className="sr-only">Data</label>
-              <input id="l-data" type="date" name="data" defaultValue={key} max={toDateKey(t)} className="input w-44" />
-              <button type="submit" className="btn btn-secondary btn-sm">Ir</button>
-            </form>
-            {!isToday ? (
-              <Link href={`/desempenho/lancar?data=${toDateKey(addDays(date, 1))}`} className="btn btn-secondary btn-sm px-2" aria-label="Próximo dia">
+            <div className="rounded-lg border border-line bg-surface-2 px-4 py-1.5 text-center">
+              <p className="text-sm font-semibold">Semana {weekLabel(weekStart)}</p>
+              <p className="text-xs text-subtle">segunda a domingo</p>
+            </div>
+            {!isCurrent ? (
+              <Link href={nav(addDays(weekStart, 7))} className="btn btn-secondary btn-sm px-2" aria-label="Próxima semana">
                 <ChevronRight className="size-4" aria-hidden />
               </Link>
             ) : null}
-            {!isToday ? <Link href="/desempenho/lancar" className="btn btn-ghost btn-sm">Hoje</Link> : null}
+            <form method="get" className="flex items-center gap-2">
+              <label htmlFor="l-sem" className="sr-only">Ir para a semana de</label>
+              <input id="l-sem" type="date" name="semana" defaultValue={key} max={toDateKey(t)} className="input w-44" title="Escolha qualquer dia da semana" />
+              <button type="submit" className="btn btn-ghost btn-sm">Ir</button>
+            </form>
+            {!isCurrent ? <Link href="/desempenho/lancar" className="btn btn-ghost btn-sm">Semana atual</Link> : null}
           </div>
-          <p className="text-sm text-muted">
-            <span className="font-medium text-ink">{formatWeekday(date)}, {formatDate(date)}</span> · {filled} de {rows.length} lançado(s)
-          </p>
+          <p className="text-sm text-muted">{filled} de {rows.length} lançado(s)</p>
         </div>
 
         {rows.length === 0 ? (
-          <EmptyState title="Nenhum colaborador ativo nesta data" description="Cadastre colaboradores para lançar métricas." action={<Link href="/colaboradores/novo" className="btn btn-primary">Cadastrar colaborador</Link>} />
+          <EmptyState title="Nenhum colaborador ativo nesta semana" description="Cadastre colaboradores para lançar métricas." action={<Link href="/colaboradores/novo" className="btn btn-primary">Cadastrar colaborador</Link>} />
         ) : (
-          <ActionForm action={saveDailyBatchAction} className="flex flex-col gap-5">
-            <Hidden name="date" value={key} />
+          <ActionForm action={saveWeeklyBatchAction} className="flex flex-col gap-5">
+            <Hidden name="week" value={key} />
             <div className="table-wrap">
               <table className="table">
                 <thead>
@@ -74,13 +88,12 @@ export default async function DailyMetricsPage(props: PageProps<"/desempenho/lan
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(({ employee: e, metric: m, scheduled }) => (
+                  {rows.map(({ employee: e, metric: m }) => (
                     <tr key={e.id}>
                       <td className="min-w-48">
                         <p className="font-medium">{e.fullName}</p>
                         <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-subtle">
                           {e.team}
-                          {scheduled === false ? <Badge tone="neutral" icon={false}>Folga</Badge> : null}
                           {m ? <Badge tone="ok" icon={false}>Lançado</Badge> : null}
                         </p>
                       </td>
@@ -94,9 +107,10 @@ export default async function DailyMetricsPage(props: PageProps<"/desempenho/lan
               </table>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <SubmitButton>Salvar lançamentos do dia</SubmitButton>
+              <SubmitButton>Salvar lançamentos da semana</SubmitButton>
               <FormMessage />
             </div>
+            <p className="text-xs text-subtle">A semana entra no mês da sua sexta-feira ({formatDate(addDays(weekStart, 4))}).</p>
           </ActionForm>
         )}
       </Panel>

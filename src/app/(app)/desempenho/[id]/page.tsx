@@ -5,15 +5,15 @@ import { requirePermission } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
 import { env } from "@/lib/env";
 import { assertUuid, orNotFound } from "@/lib/page";
-import { formatDate, formatDateTime, formatWeekday, monthKey } from "@/lib/dates";
+import { addDays, formatDateTime, monthKey } from "@/lib/dates";
 import { formatCode } from "@/lib/text";
 import { readParams } from "@/lib/validation";
-import { getMetric } from "@/modules/metrics/service";
+import { getMetric, weekLabel } from "@/modules/metrics/service";
 import { correctMetricAction } from "@/modules/metrics/actions";
 import { ActionForm, FormMessage, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
 import { DescriptionList, Notice, PageHeader, Panel } from "@/components/ui/primitives";
 
-export const metadata: Metadata = { title: "Lançamento do dia" };
+export const metadata: Metadata = { title: "Lançamento da semana" };
 
 const dec = (v: unknown) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -27,8 +27,8 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
     <>
       <PageHeader
         eyebrow={`${formatCode("employee", m.employee.code)} · Desempenho`}
-        title={`${m.employee.fullName} — ${formatWeekday(m.date)}, ${formatDate(m.date)}`}
-        actions={<Link className="btn btn-ghost" href={`/desempenho?colaborador=${m.employee.id}&mes=${monthKey(m.date)}`}>Ver evolução</Link>}
+        title={`${m.employee.fullName} — semana ${weekLabel(m.weekStart)}`}
+        actions={<Link className="btn btn-ghost" href={`/desempenho?colaborador=${m.employee.id}&mes=${monthKey(addDays(m.weekStart, 4))}`}>Ver evolução</Link>}
       />
       {params.salvo ? <div className="mb-6"><Notice tone="ok">Lançamento salvo.</Notice></div> : null}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
@@ -39,7 +39,7 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
                 { label: "Chamados atendidos", value: m.ticketsHandled.toLocaleString("pt-BR") },
                 { label: "Tempo médio de atendimento", value: `${dec(m.avgHandleMinutes)} min` },
                 { label: "Avaliação média", value: dec(m.avgRating) },
-                { label: "Função e equipe no dia", value: `${m.jobTitleSnapshot} · ${m.teamSnapshot}` },
+                { label: "Função e equipe na semana", value: `${m.jobTitleSnapshot} · ${m.teamSnapshot}` },
                 { label: "Lançado em", value: formatDateTime(m.createdAt, tz) },
               ]}
             />

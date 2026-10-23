@@ -1,7 +1,7 @@
 import type { Db } from "@/lib/db";
 import { addDays, addMonths, endOfMonth, monthKey, monthRange, startOfMonth } from "@/lib/dates";
 import { can, type Actor } from "@/lib/permissions";
-import { aggregate, employeesWithoutMetric, metricSeries } from "@/modules/metrics/service";
+import { aggregate, employeesWithoutMetric, metricSeries, weekStartOf } from "@/modules/metrics/service";
 
 export type DashboardFilters = { fromMonth: Date; toMonth: Date; employeeId?: string };
 
@@ -56,16 +56,16 @@ export async function loadDashboard(db: Db, actor: Actor, f: DashboardFilters, t
     series: Awaited<ReturnType<typeof metricSeries>>;
     current: ReturnType<typeof aggregate>;
     previous: ReturnType<typeof aggregate>;
-    /** Colaboradores com turno ontem e sem lançamento de métricas */
-    missingYesterday: Array<{ id: string; fullName: string; code: number }>;
+    /** Colaboradores ativos sem lançamento de métricas na semana passada */
+    missingLastWeek: Array<{ id: string; fullName: string; code: number }>;
   } = null;
   if (can(actor, "metrics:read")) {
     const [series, prevSeries, missing] = await Promise.all([
       metricSeries(db, actor, { months, end: from.getTime() <= to.getTime() ? startOfMonth(to) : from, employeeId: f.employeeId }),
       metricSeries(db, actor, { months, end: startOfMonth(prevTo), employeeId: f.employeeId }),
-      employeesWithoutMetric(db, actor, addDays(today, -1)),
+      employeesWithoutMetric(db, actor, addDays(weekStartOf(today), -7)),
     ]);
-    metrics = { series, current: aggregate(series), previous: aggregate(prevSeries), missingYesterday: f.employeeId ? missing.filter((m) => m.id === f.employeeId) : missing };
+    metrics = { series, current: aggregate(series), previous: aggregate(prevSeries), missingLastWeek: f.employeeId ? missing.filter((m) => m.id === f.employeeId) : missing };
   }
 
   const upcomingMeetings = can(actor, "meetings:read")

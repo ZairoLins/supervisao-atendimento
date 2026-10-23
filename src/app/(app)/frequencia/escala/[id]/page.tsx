@@ -10,7 +10,7 @@ import { ADJUSTMENT_KIND, WEEKDAYS_SHORT } from "@/lib/labels";
 import { readParams } from "@/lib/validation";
 import { getEmployee, employeeOptions } from "@/modules/employees/service";
 import { employeeCalendar } from "@/modules/attendance/occurrences";
-import { createAdjustmentAction, endAssignmentAction, revokeAdjustmentAction } from "@/modules/attendance/actions";
+import { createAdjustmentAction, deleteAssignmentAction, endAssignmentAction, revokeAdjustmentAction } from "@/modules/attendance/actions";
 import { ActionForm, FormMessage, Hidden, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
 import { Badge, EmptyState, PageHeader, Panel, Stat, cx } from "@/components/ui/primitives";
 import { AttendanceNav } from "../../nav";
@@ -200,6 +200,18 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
                           <FormMessage />
                         </ActionForm>
                       </details>
+                    ) : null}
+                    {canWrite ? (
+                      <ActionForm action={deleteAssignmentAction.bind(null, a.id)} className="mt-2">
+                        <SubmitButton
+                          variant="ghost"
+                          className="btn-sm -ml-3 text-danger hover:bg-danger-soft hover:text-danger"
+                          confirm={`Excluir a vigência "${a.schedule.name}" iniciada em ${formatDate(a.validFrom)}? Use só se foi lançada por engano. Se ela encerrou a jornada anterior, a anterior volta a valer.`}
+                        >
+                          Excluir vigência
+                        </SubmitButton>
+                        <FormMessage />
+                      </ActionForm>
                     ) : null}
                   </li>
                 ))}

@@ -33,7 +33,7 @@ describe.skipIf(!hasTestDb)("pesquisa global", () => {
       agenda: "Revisão da escala de dezembro\nIndicadores de satisfação",
       participantIds: [ana.id],
     });
-    await createMetric(testDb(), sup, { employeeId: ana.id, date: "2026-09-18", ticketsHandled: "210", avgHandleMinutes: "7", avgRating: "9" }, new Date(Date.UTC(2026, 9, 23)));
+    await createMetric(testDb(), sup, { employeeId: ana.id, week: "2026-09-18", ticketsHandled: "210", avgHandleMinutes: "7", avgRating: "9" }, new Date(Date.UTC(2026, 9, 23)));
     const atestado = await occurrenceType("ATESTADO");
     await createOccurrence(testDb(), sup, { employeeId: ana.id, typeId: atestado.id, date: "2026-10-02", adminNotes: "Entregue na recepção", restrictedNotes: "Diagnóstico sigiloso XPTO" });
     await createFeedback(testDb(), sup, { employeeId: ana.id, date: "2026-10-03", type: "RECOGNITION", context: "Elogio de cliente sobre empatia", positives: "Detalhe privado da conversa" });
@@ -78,12 +78,13 @@ describe.skipIf(!hasTestDb)("pesquisa global", () => {
     expect(r2.groups[0].type).toBe("meeting");
   });
 
-  it("encontra métricas por mês e por dia", async () => {
+  it("encontra métricas por mês e por data da semana", async () => {
     const r = await globalSearch(testDb(), sup, "09/2026", { limit: 5 });
     expect(r.groups.some((g) => g.type === "metric")).toBe(true);
-    const r2 = await globalSearch(testDb(), sup, "18/09/2026", { limit: 5, types: ["metric"] });
-    expect(r2.groups[0].items[0].title).toBe("Ana Beatriz Conceição — 18/09/2026");
-    const r3 = await globalSearch(testDb(), sup, "19/09/2026", { limit: 5, types: ["metric"] });
+    // Qualquer dia da semana encontra o lançamento semanal
+    const r2 = await globalSearch(testDb(), sup, "16/09/2026", { limit: 5, types: ["metric"] });
+    expect(r2.groups[0].items[0].title).toBe("Ana Beatriz Conceição — semana 14/09 a 20/09/2026");
+    const r3 = await globalSearch(testDb(), sup, "21/09/2026", { limit: 5, types: ["metric"] });
     expect(r3.total).toBe(0);
   });
 

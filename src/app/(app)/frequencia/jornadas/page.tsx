@@ -59,8 +59,13 @@ export default async function SchedulesPage(props: PageProps<"/frequencia/jornad
                           {s.kind === "WEEKLY" ? s.weekdays.map((d) => WEEKDAYS_SHORT[d]).join(", ") : `Ciclo de ${s.cycleDays} dias · trabalho na posição ${s.workOffsets.join(", ")}`}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap text-muted">{s.segments.map((g) => formatTimeRange(g.startMinute, g.endMinute)).join(" · ")}</td>
-                      <td className="text-right tabular-nums">{formatDuration(segmentMinutes(s.segments))}</td>
+                      <td className="text-muted">
+                        <span className="whitespace-nowrap">{s.segments.filter((g) => g.weekday === null).map((g) => formatTimeRange(g.startMinute, g.endMinute)).join(" · ")}</span>
+                        {s.segments.filter((g) => g.weekday !== null).map((g) => (
+                          <span key={g.id} className="block whitespace-nowrap text-xs">{WEEKDAYS_SHORT[g.weekday!]}: {formatTimeRange(g.startMinute, g.endMinute)}</span>
+                        ))}
+                      </td>
+                      <td className="text-right tabular-nums">{formatDuration(segmentMinutes(s.segments.filter((g) => g.weekday === null)))}</td>
                       <td className="text-xs text-subtle">{s._count.assignments} atribuição(ões)</td>
                     </tr>
                   ))}

@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { AppError } from "@/lib/errors";
 import { parseDateKey } from "@/lib/dates";
 import { createEmployee, inactivateEmployee, listEmployees, reactivateEmployee, updateEmployee } from "@/modules/employees/service";
-import { combine, correctMetric, createMetric, dailySeries, getMetric, metricSeries, saveDailyBatch } from "@/modules/metrics/service";
+import { combine, correctMetric, createMetric, fridayOf, getMetric, metricSeries, saveWeeklyBatch, weekStartOf, weeklyReportData, weeklySeries } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback } from "@/modules/feedbacks/service";
 import { createUser, disconnect, hasTestDb, resetDb, testDb } from "../support/db";
@@ -34,7 +34,7 @@ describe.skipIf(!hasTestDb)("colaboradores", () => {
   it("inativa sem excluir históricos e preserva vínculos por ID após renomear", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
-    await createMetric(testDb(), sup, { employeeId: e.id, date: "2026-09-15", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9" }, parseDateKey("2026-10-23"));
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-15", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9" }, parseDateKey("2026-10-23"));
     const falta = await occurrenceType("FALTA");
     await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: falta.id, date: "2026-09-10" });
     await createFeedback(testDb(), sup, { employeeId: e.id, date: "2026-09-12", type: "ALIGNMENT", context: "Alinhamento de fila" });
@@ -67,34 +67,35 @@ describe.skipIf(!hasTestDb)("colaboradores", () => {
   });
 });
 
-describe.skipIf(!hasTestDb)("métricas diárias", () => {
+describe.skipIf(!hasTestDb)("métricas semanais", () => {
   beforeEach(resetDb);
   afterAll(disconnect);
 
-  const TODAY = parseDateKey("2026-10-23");
+  const TODAY = parseDateKey("2026-10-23"); // sexta-feira
   const base = (employeeId: string, over: Record<string, string> = {}) => ({
     employeeId,
-    date: "2026-10-20",
-    ticketsHandled: "32",
+    week: "2026-10-16",
+    ticketsHandled: "320",
     avgHandleMinutes: "6,5",
     avgRating: "8.75",
     ...over,
   });
 
-  it("impede dois lançamentos do mesmo colaborador no mesmo dia", async () => {
+  it("normaliza a semana para a segunda-feira e impede duas vezes a mesma semana", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
-    await createMetric(testDb(), sup, base(e.id), TODAY);
-    const err = await createMetric(testDb(), sup, base(e.id, { ticketsHandled: "1" }), TODAY).catch((x) => x);
+    const m = await createMetric(testDb(), sup, base(e.id), TODAY);
+    expect(m.weekStart.toISOString().slice(0, 10)).toBe("2026-10-12");
+    const err = await createMetric(testDb(), sup, base(e.id, { week: "2026-10-18", ticketsHandled: "1" }), TODAY).catch((x) => x);
     expect(err).toBeInstanceOf(AppError);
     expect(err.code).toBe("CONFLICT");
-    expect(await testDb().dailyMetric.count()).toBe(1);
-    // Outro dia é permitido
-    await createMetric(testDb(), sup, base(e.id, { date: "2026-10-21" }), TODAY);
-    expect(await testDb().dailyMetric.count()).toBe(2);
+    await createMetric(testDb(), sup, base(e.id, { week: "2026-10-19" }), TODAY);
+    expect(await testDb().weeklyMetric.count()).toBe(2);
+    expect(weekStartOf(parseDateKey("2026-10-25")).toISOString().slice(0, 10)).toBe("2026-10-19");
+    expect(fridayOf(parseDateKey("2026-10-19")).toISOString().slice(0, 10)).toBe("2026-10-23");
   });
 
-  it("rejeita avaliação fora de 0 a 10, valores inválidos e datas futuras", async () => {
+  it("rejeita avaliação fora de 0 a 10, valores inválidos e semanas futuras", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
     for (const avgRating of ["10.01", "-1", "11", "abc"]) {
@@ -102,59 +103,55 @@ describe.skipIf(!hasTestDb)("métricas diárias", () => {
     }
     await expect(createMetric(testDb(), sup, base(e.id, { ticketsHandled: "-5" }), TODAY)).rejects.toBeInstanceOf(ZodError);
     await expect(createMetric(testDb(), sup, base(e.id, { avgRating: "8.123" }), TODAY)).rejects.toBeInstanceOf(ZodError);
-    await expect(createMetric(testDb(), sup, base(e.id, { date: "2026-10-24" }), TODAY)).rejects.toThrow(/futuras/);
-    expect(await createMetric(testDb(), sup, base(e.id, { avgRating: "10" }), TODAY)).toBeTruthy();
+    await expect(createMetric(testDb(), sup, base(e.id, { week: "2026-10-26" }), TODAY)).rejects.toThrow(/futuras/);
+    expect(await createMetric(testDb(), sup, base(e.id, { avgRating: "10", week: "2026-10-22" }), TODAY)).toBeTruthy();
   });
 
-  it("o banco também impõe a faixa da avaliação (CHECK)", async () => {
+  it("o banco impõe avaliação 0–10 e semana iniciando na segunda (CHECK)", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
-    await expect(
-      testDb().dailyMetric.create({
-        data: { employeeId: e.id, date: parseDateKey("2026-10-01"), ticketsHandled: 1, avgHandleMinutes: 1, avgRating: 12, jobTitleSnapshot: "x", teamSnapshot: "y" },
-      }),
-    ).rejects.toThrow();
+    const data = { employeeId: e.id, ticketsHandled: 1, avgHandleMinutes: 1, avgRating: 5, jobTitleSnapshot: "x", teamSnapshot: "y" };
+    await expect(testDb().weeklyMetric.create({ data: { ...data, weekStart: parseDateKey("2026-10-12"), avgRating: 12 } })).rejects.toThrow();
+    await expect(testDb().weeklyMetric.create({ data: { ...data, weekStart: parseDateKey("2026-10-14") } })).rejects.toThrow();
   });
 
-  it("lançamento do dia em lote: cria, ignora linhas vazias, ajusta com histórico e valida por linha", async () => {
+  it("lançamento da semana em lote: cria, ignora vazios, ajusta com histórico e valida por linha", async () => {
     const sup = await createUser();
     const a = await makeEmployee(sup);
     const b = await makeEmployee(sup);
     const c = await makeEmployee(sup);
-    const r1 = await saveDailyBatch(
+    const r1 = await saveWeeklyBatch(
       testDb(),
       sup,
-      { date: "2026-10-22", [`t_${a.id}`]: "40", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "20", [`a_${b.id}`]: "7,5", [`r_${b.id}`]: "8", [`t_${c.id}`]: "", [`a_${c.id}`]: "", [`r_${c.id}`]: "" },
+      { week: "2026-10-23", [`t_${a.id}`]: "400", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "200", [`a_${b.id}`]: "7,5", [`r_${b.id}`]: "8", [`t_${c.id}`]: "", [`a_${c.id}`]: "", [`r_${c.id}`]: "" },
       TODAY,
     );
-    expect(r1).toEqual({ created: 2, updated: 0, unchanged: 0 });
+    expect(r1).toMatchObject({ created: 2, updated: 0, unchanged: 0 });
+    expect(r1.weekStart.toISOString().slice(0, 10)).toBe("2026-10-19");
 
-    // Reenvio com um valor alterado: gera revisão preservando o original
-    const r2 = await saveDailyBatch(
+    const r2 = await saveWeeklyBatch(
       testDb(),
       sup,
-      { date: "2026-10-22", [`t_${a.id}`]: "41", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "20", [`a_${b.id}`]: "7.5", [`r_${b.id}`]: "8" },
+      { week: "2026-10-19", [`t_${a.id}`]: "410", [`a_${a.id}`]: "5", [`r_${a.id}`]: "9", [`t_${b.id}`]: "200", [`a_${b.id}`]: "7.5", [`r_${b.id}`]: "8" },
       TODAY,
     );
-    expect(r2).toEqual({ created: 0, updated: 1, unchanged: 1 });
-    const ma = await testDb().dailyMetric.findFirstOrThrow({ where: { employeeId: a.id }, include: { revisions: true } });
-    expect(ma.ticketsHandled).toBe(41);
-    expect(ma.revisions.map((r) => r.ticketsHandled)).toEqual([40]);
+    expect(r2).toMatchObject({ created: 0, updated: 1, unchanged: 1 });
+    const ma = await testDb().weeklyMetric.findFirstOrThrow({ where: { employeeId: a.id }, include: { revisions: true } });
+    expect(ma.ticketsHandled).toBe(410);
+    expect(ma.revisions.map((r) => r.ticketsHandled)).toEqual([400]);
 
-    // Linha incompleta e avaliação inválida: erros por célula, nada é gravado
-    const err = await saveDailyBatch(testDb(), sup, { date: "2026-10-21", [`t_${c.id}`]: "10", [`r_${a.id}`]: "11", [`t_${a.id}`]: "1", [`a_${a.id}`]: "1" }, TODAY).catch((x) => x);
+    const err = await saveWeeklyBatch(testDb(), sup, { week: "2026-10-12", [`t_${c.id}`]: "10", [`r_${a.id}`]: "11", [`t_${a.id}`]: "1", [`a_${a.id}`]: "1" }, TODAY).catch((x) => x);
     expect(err).toBeInstanceOf(AppError);
     expect(err.fieldErrors).toHaveProperty(`a_${c.id}`);
     expect(err.fieldErrors).toHaveProperty(`r_${a.id}`);
-    expect(await testDb().dailyMetric.count({ where: { date: parseDateKey("2026-10-21") } })).toBe(0);
-
-    await expect(saveDailyBatch(testDb(), sup, { date: "2026-10-21" }, TODAY)).rejects.toThrow(/ao menos um/);
+    expect(await testDb().weeklyMetric.count({ where: { weekStart: parseDateKey("2026-10-12") } })).toBe(0);
+    await expect(saveWeeklyBatch(testDb(), sup, { week: "2026-10-12" }, TODAY)).rejects.toThrow(/ao menos um/);
   });
 
   it("correção preserva valores originais em revisões, com motivo", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
-    const m = await createMetric(testDb(), sup, base(e.id, { ticketsHandled: "320" }), TODAY);
+    const m = await createMetric(testDb(), sup, base(e.id), TODAY);
     await correctMetric(testDb(), sup, m.id, { ticketsHandled: "330", avgHandleMinutes: "6.5", avgRating: "8.75", reason: "Ajuste da fonte" });
     await correctMetric(testDb(), sup, m.id, { ticketsHandled: "331", avgHandleMinutes: "6.4", avgRating: "8.8", reason: "Nova conferência" });
     const full = await getMetric(testDb(), sup, m.id);
@@ -165,25 +162,35 @@ describe.skipIf(!hasTestDb)("métricas diárias", () => {
     await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "1", avgHandleMinutes: "1", avgRating: "1" })).rejects.toBeInstanceOf(ZodError);
   });
 
-  it("agrega dias em meses (meses vazios nulos) e monta a série diária", async () => {
+  it("semana conta no mês da sua sexta-feira; séries mensal e semanal", async () => {
     const sup = await createUser();
     const a = await makeEmployee(sup);
     const b = await makeEmployee(sup);
-    await createMetric(testDb(), sup, { employeeId: a.id, date: "2026-08-03", ticketsHandled: "100", avgHandleMinutes: "4", avgRating: "8" }, TODAY);
-    await createMetric(testDb(), sup, { employeeId: b.id, date: "2026-08-04", ticketsHandled: "300", avgHandleMinutes: "8", avgRating: "10" }, TODAY);
-    await createMetric(testDb(), sup, { employeeId: a.id, date: "2026-06-10", ticketsHandled: "50", avgHandleMinutes: "5", avgRating: "7" }, TODAY);
-    const s = await metricSeries(testDb(), sup, { months: 3, end: parseDateKey("2026-08-01") });
-    expect(s.map((p) => p.month)).toEqual(["2026-06", "2026-07", "2026-08"]);
-    expect(s[1].tickets).toBeNull();
-    expect(s[2].tickets).toBe(400);
-    expect(s[2].aht).toBe(7); // (100*4 + 300*8) / 400
-    expect(s[2].rating).toBe(9.5); // (100*8 + 300*10) / 400
-    const d = await dailySeries(testDb(), sup, { month: parseDateKey("2026-08-01") });
-    expect(d).toHaveLength(31);
-    expect(d[2]).toMatchObject({ month: "2026-08-03", tickets: 100 });
-    expect(d[0].tickets).toBeNull();
-    const ind = await dailySeries(testDb(), sup, { month: parseDateKey("2026-08-01"), employeeId: b.id });
-    expect(ind.filter((x) => x.tickets !== null)).toHaveLength(1);
+    // Semana 27/07–02/08: sexta 31/07 → julho
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-07-27", ticketsHandled: "50", avgHandleMinutes: "5", avgRating: "7" }, TODAY);
+    // Semana 03/08: agosto
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-03", ticketsHandled: "100", avgHandleMinutes: "4", avgRating: "8" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: b.id, week: "2026-08-03", ticketsHandled: "300", avgHandleMinutes: "8", avgRating: "10" }, TODAY);
+    // Semana 31/08–06/09: sexta 04/09 → setembro (mesmo começando em agosto)
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-31", ticketsHandled: "10", avgHandleMinutes: "1", avgRating: "1" }, TODAY);
+    const s = await metricSeries(testDb(), sup, { months: 3, end: parseDateKey("2026-09-01") });
+    expect(s.map((p) => [p.month, p.tickets])).toEqual([["2026-07", 50], ["2026-08", 400], ["2026-09", 10]]);
+    expect(s[1].aht).toBe(7);
+    expect(s[1].rating).toBe(9.5);
+    const w = await weeklySeries(testDb(), sup, { weeks: 3, end: parseDateKey("2026-08-05") });
+    expect(w.map((p) => [p.month, p.tickets])).toEqual([["2026-07-20", null], ["2026-07-27", 50], ["2026-08-03", 400]]);
+  });
+
+  it("dados do relatório semanal comparam com a semana anterior", async () => {
+    const sup = await createUser();
+    const e = await makeEmployee(sup, { fullName: "Bia Souza" });
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-12", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "8" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-19", ticketsHandled: "120", avgHandleMinutes: "4", avgRating: "9", notes: "Semana com campanha" }, TODAY);
+    const r = await weeklyReportData(testDb(), sup, parseDateKey("2026-10-22"));
+    expect(r.weekStart.toISOString().slice(0, 10)).toBe("2026-10-19");
+    expect(r.rows[0]).toMatchObject({ name: "Bia Souza", tickets: 120, prev: { tickets: 100 } });
+    expect(r.total.tickets).toBe(120);
+    expect(r.previousTotal.tickets).toBe(100);
   });
 
   it("combine pondera tempo médio e avaliação pelo volume", () => {

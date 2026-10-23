@@ -1,5 +1,6 @@
 import type { Db } from "@/lib/db";
-import { endOfMonth, formatDate, formatTimeRange } from "@/lib/dates";
+import { addDays, endOfMonth, formatDate, formatTimeRange } from "@/lib/dates";
+import { weekLabel, weekStartOf } from "@/modules/metrics/service";
 import { EMPLOYEE_STATUS, FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, NOTE_CATEGORY } from "@/lib/labels";
 import { can, type Actor, type Permission } from "@/lib/permissions";
 import { formatCode, normalizeQuery, normalizeText, parseCodeQuery, truncate, type CodeEntity } from "@/lib/text";
@@ -135,27 +136,27 @@ const PROVIDERS: Provider[] = [
     type: "metric",
     permission: "metrics:read",
     async run(db, _actor, ctx) {
-      // Termo pode ser um dia (23/10/2026), um mês (10/2026) ou o nome do colaborador
+      // Termo pode ser um dia (semana que o contém), um mês (10/2026) ou o nome do colaborador
       const day = parseDayQuery(ctx.raw);
       const month = day ? null : parseMonthQuery(ctx.raw);
-      const byDate = day ? { equals: day } : month ? { gte: month, lte: endOfMonth(month) } : undefined;
-      const rows = await db.dailyMetric.findMany({
+      const byDate = day ? { equals: weekStartOf(day) } : month ? { gte: addDays(month, -4), lte: addDays(endOfMonth(month), -4) } : undefined;
+      const rows = await db.weeklyMetric.findMany({
         where: {
           ...(byDate ? {} : { employee: { searchText: { contains: ctx.q } } }),
-          ...(byDate || dateRange(ctx) ? { date: { ...dateRange(ctx), ...byDate } } : {}),
+          ...(byDate || dateRange(ctx) ? { weekStart: { ...dateRange(ctx), ...byDate } } : {}),
         },
         include: { employee: { select: { fullName: true, code: true } } },
         take: ctx.take,
-        orderBy: { date: "desc" },
+        orderBy: { weekStart: "desc" },
       });
       return rows.map((m) => ({
         type: "metric",
         id: m.id,
-        title: `${m.employee.fullName} — ${formatDate(m.date)}`,
+        title: `${m.employee.fullName} — semana ${weekLabel(m.weekStart)}`,
         summary: `${m.ticketsHandled} chamados · TMA ${Number(m.avgHandleMinutes).toLocaleString("pt-BR")} min · avaliação ${Number(m.avgRating).toLocaleString("pt-BR")}`,
-        date: formatDate(m.date),
+        date: formatDate(m.weekStart),
         url: `/desempenho/${m.id}`,
-        score: byDate ? 300 : related(m.employee.fullName, ctx, m.date),
+        score: byDate ? 300 : related(m.employee.fullName, ctx, m.weekStart),
       }));
     },
   },

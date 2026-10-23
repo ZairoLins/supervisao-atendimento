@@ -1,6 +1,6 @@
 # Supervisão de Atendimento
 
-Aplicação web interna, em português, que centraliza a rotina do supervisor de uma equipe de atendimento: colaboradores, frequência e escalas (incluindo 12x36), métricas lançadas diariamente, reuniões e atas, feedbacks, anotações, relatórios Excel/PDF e **pesquisa global** (Ctrl/⌘+K) em todos os módulos.
+Aplicação web interna, em português, que centraliza a rotina do supervisor de uma equipe de atendimento: colaboradores, frequência e escalas (incluindo 12x36), métricas lançadas por semana (com relatório semanal em PDF/Excel), reuniões e atas, feedbacks, anotações, relatórios Excel/PDF e **pesquisa global** (Ctrl/⌘+K) em todos os módulos.
 
 Visual moderno em azul, branco e preto: navegação lateral preta, conteúdo em cartões brancos e azul como cor de ação e destaque.
 
@@ -66,5 +66,7 @@ Veja [.env.example](.env.example). Obrigatórias: `DATABASE_URL`, `SESSION_SECRE
 - Uso inicial por um único supervisor (perfil `SUPERVISOR`); existe o perfil `ASSISTANT` (auxiliar, sem acesso a frequência, feedbacks, anotações e auditoria) para comprovar a autorização por módulo e uso futuro.
 - Horários são de parede no fuso `APP_TIMEZONE`; datas são de calendário (sem fuso). Plantões que atravessam a meia-noite pertencem à data de início.
 - O controle de frequência é **gerencial**: não calcula descontos salariais nem avalia a validade jurídica de atestados.
-- Métricas são lançadas por dia (um lançamento por colaborador e dia, em lote para toda a equipe); visões mensais somam os dias; correções preservam os valores anteriores.
+- Métricas são lançadas por semana (segunda a domingo, em lote para toda a equipe, tipicamente às sextas); a semana conta no mês da sua sexta-feira; correções preservam os valores anteriores.
+- A jornada padrão de Funcionário inclui sábado 08:00–12:00; jornadas semanais podem ter horário próprio no sábado/domingo.
+- Vigências de jornada lançadas por engano podem ser excluídas (a anterior é reaberta quando aplicável).
 - Atraso e saída antecipada pedem só a hora de chegada/saída; o restante do período vem da escala do colaborador.

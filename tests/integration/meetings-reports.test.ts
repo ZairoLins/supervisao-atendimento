@@ -16,7 +16,8 @@ import {
 import { createMetric } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback } from "@/modules/feedbacks/service";
-import { buildReport, reportParamsSchema } from "@/modules/reports/service";
+import { buildReport, buildWeeklyReport, reportParamsSchema } from "@/modules/reports/service";
+import { renderWeeklyExcel, renderWeeklyPdf } from "@/modules/reports/weekly";
 import { renderExcel, renderPdf, sanitizeCell } from "@/modules/reports/render";
 import { createUser, disconnect, hasTestDb, resetDb, testDb } from "../support/db";
 import { makeEmployee, occurrenceType } from "../support/factories";
@@ -101,9 +102,9 @@ describe.skipIf(!hasTestDb)("relatórios", () => {
   it("gera Excel válido com dados reais, filtros, totais e células protegidas", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup, { fullName: "=cmd|' /C calc'!A0" });
-    await createMetric(testDb(), sup, { employeeId: e.id, date: "2026-09-10", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9", notes: "+SUM(1,2)" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-09-10", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9", notes: "+SUM(1,2)" }, TODAY);
     const other = await makeEmployee(sup);
-    await createMetric(testDb(), sup, { employeeId: other.id, date: "2026-09-11", ticketsHandled: "300", avgHandleMinutes: "7", avgRating: "7" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: other.id, week: "2026-09-11", ticketsHandled: "300", avgHandleMinutes: "7", avgRating: "7" }, TODAY);
     const report = await buildReport(testDb(), sup, params({ tipo: "metricas", de: "2026-09-01", ate: "2026-09-30" }), TODAY);
     expect(report.rows).toHaveLength(2);
     expect(report.totals?.tickets).toBe(400);
@@ -122,6 +123,29 @@ describe.skipIf(!hasTestDb)("relatórios", () => {
     const filtered = await buildReport(testDb(), sup, params({ tipo: "metricas", de: "2026-09-01", ate: "2026-09-30", colaborador: other.id }), TODAY);
     expect(filtered.rows).toHaveLength(1);
     expect(await testDb().auditLog.count({ where: { action: "EXPORT" } })).toBe(2);
+  });
+
+  it("relatório semanal: PDF com design próprio e Excel formatado, inclusive semana vazia", async () => {
+    const sup = await createUser();
+    const e = await makeEmployee(sup, { fullName: "=Ana" });
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-12", ticketsHandled: "90", avgHandleMinutes: "5", avgRating: "8" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: e.id, week: "2026-10-19", ticketsHandled: "120", avgHandleMinutes: "4.5", avgRating: "9.1", notes: "Campanha" }, TODAY);
+    const weekly = await buildWeeklyReport(testDb(), sup, params({ tipo: "semanal", formato: "pdf", semana: "2026-10-21" }), TODAY);
+    expect(weekly.rows).toHaveLength(1);
+    expect(weekly.rows[0].prev?.tickets).toBe(90);
+    const pdf = await renderWeeklyPdf(weekly, "America/Sao_Paulo");
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    const xlsx = await renderWeeklyExcel(weekly, "America/Sao_Paulo");
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(xlsx as unknown as ArrayBuffer);
+    const values: unknown[] = [];
+    wb.worksheets[0].eachRow((row) => row.eachCell((c) => values.push(c.value)));
+    expect(values).toContain("'=Ana");
+    expect(values).toContain(120);
+    const empty = await buildWeeklyReport(testDb(), sup, params({ tipo: "semanal", formato: "pdf", semana: "2026-09-01" }), TODAY);
+    expect(empty.rows).toHaveLength(0);
+    expect((await renderWeeklyPdf(empty, "America/Sao_Paulo")).subarray(0, 5).toString()).toBe("%PDF-");
+    expect(await testDb().auditLog.count({ where: { action: "EXPORT", entityId: "semanal" } })).toBe(2);
   });
 
   it("gera PDF válido, inclusive sem registros", async () => {

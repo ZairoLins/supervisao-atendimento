@@ -14,7 +14,7 @@ import { inactivateEmployeeAction, reactivateEmployeeAction, createNoteAction, d
 import { employeeAttendanceSummary, listOccurrences } from "@/modules/attendance/occurrences";
 import { loadRules } from "@/modules/attendance/schedules";
 import { findAssignment } from "@/modules/attendance/rules";
-import { listMetrics, metricSeries } from "@/modules/metrics/service";
+import { listMetrics, metricSeries, weekLabel } from "@/modules/metrics/service";
 import { listFeedbacks, listNotes } from "@/modules/feedbacks/service";
 import { ActionForm, FormMessage, Hidden, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
 import { DescriptionList, EmptyState, LabelBadge, Notice, PageHeader, Panel, Stat, Tabs } from "@/components/ui/primitives";
@@ -158,12 +158,12 @@ async function Performance({ actor, employeeId }: { actor: Actor; employeeId: st
         actions={
           <>
             <Link href={`/desempenho?colaborador=${employeeId}`} className="btn btn-ghost btn-sm">Análise completa</Link>
-            {can(actor, "metrics:write") ? <Link href="/desempenho/lancar" className="btn btn-secondary btn-sm"><Plus className="size-3.5" aria-hidden /> Lançar métricas do dia</Link> : null}
+            {can(actor, "metrics:write") ? <Link href="/desempenho/lancar" className="btn btn-secondary btn-sm"><Plus className="size-3.5" aria-hidden /> Lançar métricas da semana</Link> : null}
           </>
         }
       >
         {list.total === 0 ? (
-          <EmptyState title="Sem métricas lançadas" description="Lance as métricas do dia para acompanhar a evolução deste colaborador." />
+          <EmptyState title="Sem métricas lançadas" description="Lance as métricas da semana para acompanhar a evolução deste colaborador." />
         ) : (
           <MetricTrend data={series} primaryLabel="Colaborador" />
         )}
@@ -173,12 +173,12 @@ async function Performance({ actor, employeeId }: { actor: Actor; employeeId: st
           <div className="table-wrap">
             <table className="table">
               <thead>
-                <tr><th>Data</th><th className="text-right">Chamados</th><th className="text-right">TMA (min)</th><th className="text-right">Avaliação</th><th>Correções</th></tr>
+                <tr><th>Semana</th><th className="text-right">Chamados</th><th className="text-right">TMA (min)</th><th className="text-right">Avaliação</th><th>Correções</th></tr>
               </thead>
               <tbody>
                 {list.items.map((m) => (
                   <tr key={m.id}>
-                    <td><Link className="link" href={`/desempenho/${m.id}`}>{formatDate(m.date)}</Link></td>
+                    <td><Link className="link" href={`/desempenho/${m.id}`}>{weekLabel(m.weekStart)}</Link></td>
                     <td className="text-right tabular-nums">{m.ticketsHandled.toLocaleString("pt-BR")}</td>
                     <td className="text-right tabular-nums">{Number(m.avgHandleMinutes).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                     <td className="text-right tabular-nums">{Number(m.avgRating).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>

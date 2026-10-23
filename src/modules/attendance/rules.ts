@@ -14,6 +14,9 @@ import { addDays, dayNumber, eachDay, MINUTES_PER_DAY, toDateKey, weekday } from
 
 export type Segment = { startMinute: number; endMinute: number };
 
+/** Trecho de jornada; weekday preenchido = horário específico daquele dia (0 = domingo). */
+export type ScheduleSegment = Segment & { weekday?: number | null };
+
 export type ScheduleRule = {
   id: string;
   name: string;
@@ -21,7 +24,7 @@ export type ScheduleRule = {
   weekdays: number[];
   cycleDays: number | null;
   workOffsets: number[];
-  segments: Segment[];
+  segments: ScheduleSegment[];
 };
 
 export type AssignmentRule = {
@@ -74,6 +77,21 @@ export function validateSegments(segments: Segment[]): string | null {
   return null;
 }
 
+/**
+ * Trechos da jornada válidos numa data. Revezamento: todos os trechos gerais.
+ * Semanal: trechos específicos do dia da semana, se houver; senão os gerais (quando o dia
+ * faz parte da jornada).
+ */
+export function segmentsForDay(schedule: Pick<ScheduleRule, "kind" | "weekdays" | "segments">, date: Date): Segment[] {
+  const general = schedule.segments.filter((s) => s.weekday === null || s.weekday === undefined);
+  const strip = (list: ScheduleSegment[]) => list.map(({ startMinute, endMinute }) => ({ startMinute, endMinute }));
+  if (schedule.kind === "ROTATION") return strip(general);
+  const wd = weekday(date);
+  const specific = schedule.segments.filter((s) => s.weekday === wd);
+  if (specific.length) return strip(specific);
+  return schedule.weekdays.includes(wd) ? strip(general) : [];
+}
+
 export function segmentMinutes(segments: Segment[]): number {
   return segments.reduce((sum, s) => sum + (s.endMinute - s.startMinute), 0);
 }
@@ -107,7 +125,7 @@ export function cyclePosition(date: Date, reference: Date, cycleDays: number): n
 
 export function isPlannedWorkDay(assignment: Pick<AssignmentRule, "schedule" | "cycleReferenceDate">, date: Date): boolean {
   const s = assignment.schedule;
-  if (s.kind === "WEEKLY") return s.weekdays.includes(weekday(date));
+  if (s.kind === "WEEKLY") return segmentsForDay(s, date).length > 0;
   if (!assignment.cycleReferenceDate || !s.cycleDays || s.cycleDays < 1) return false;
   return s.workOffsets.includes(cyclePosition(date, assignment.cycleReferenceDate, s.cycleDays));
 }
@@ -115,7 +133,7 @@ export function isPlannedWorkDay(assignment: Pick<AssignmentRule, "schedule" | "
 export function planDay(assignments: AssignmentRule[], adjustments: AdjustmentRule[], date: Date): DayPlan {
   const assignment = findAssignment(assignments, date);
   const isWorkDay = assignment ? isPlannedWorkDay(assignment, date) : false;
-  const plannedSegments = isWorkDay && assignment ? assignment.schedule.segments : [];
+  const plannedSegments = isWorkDay && assignment ? segmentsForDay(assignment.schedule, date) : [];
   const key = toDateKey(date);
   // O ajuste mais recente não revogado prevalece
   const adjustment =
@@ -301,16 +319,17 @@ export function summarizeAttendance(
 /** Jornadas padrão solicitadas, usadas na carga inicial (seed) do sistema. */
 export const DEFAULT_SCHEDULES: Array<Omit<ScheduleRule, "id"> & { description: string }> = [
   {
-    name: "Funcionário — 08:00–12:00 e 14:00–18:00",
+    name: "Funcionário — Seg a Sex 08:00–12:00 e 14:00–18:00, Sáb 08:00–12:00",
     kind: "WEEKLY",
-    weekdays: [1, 2, 3, 4, 5],
+    weekdays: [1, 2, 3, 4, 5, 6],
     cycleDays: null,
     workOffsets: [],
     segments: [
       { startMinute: 480, endMinute: 720 },
       { startMinute: 840, endMinute: 1080 },
+      { startMinute: 480, endMinute: 720, weekday: 6 },
     ],
-    description: "Segunda a sexta, intervalo de 2h não computável.",
+    description: "Segunda a sexta com intervalo de 2h não computável; sábado das 08:00 às 12:00.",
   },
   {
     name: "Estagiário manhã — 08:00–14:00",

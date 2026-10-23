@@ -117,7 +117,7 @@ model Employee {
   shiftAdjustments     ShiftAdjustment[]             @relation("AdjustmentEmployee")
   swapCounterparts     ShiftAdjustment[]             @relation("AdjustmentSwapWith")
   occurrences          AttendanceOccurrence[]
-  metrics              DailyMetric[]
+  metrics              WeeklyMetric[]
   feedbacks            Feedback[]
   notes                EmployeeNote[]
   meetingParticipation MeetingParticipant[]
@@ -160,6 +160,9 @@ model WorkScheduleSegment {
   id          String @id @default(uuid(7)) @db.Uuid
   scheduleId  String @db.Uuid
   position    Int
+  // Nulo = vale para todos os dias da jornada; 0–6 = horário específico daquele dia
+  // (ex.: sábado 08:00–12:00 numa jornada de segunda a sábado)
+  weekday     Int?
   startMinute Int
   endMinute   Int
 
@@ -307,11 +310,13 @@ model Attachment {
 
 // ─────────────────────────── Desempenho ───────────────────────────
 
-// Indicadores lançados por dia; visões mensais são agregadas a partir deles.
-model DailyMetric {
+// Indicadores lançados por semana (segunda a domingo). A semana pertence ao mês/período
+// da sua sexta-feira. Visões mensais são agregadas a partir das semanas.
+model WeeklyMetric {
   id               String   @id @default(uuid(7)) @db.Uuid
   employeeId       String   @db.Uuid
-  date             DateTime @db.Date
+  // Segunda-feira da semana
+  weekStart        DateTime @db.Date
   ticketsHandled   Int
   avgHandleMinutes Decimal  @db.Decimal(8, 2)
   avgRating        Decimal  @db.Decimal(4, 2)
@@ -322,15 +327,15 @@ model DailyMetric {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  employee  Employee              @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  revisions DailyMetricRevision[]
+  employee  Employee               @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  revisions WeeklyMetricRevision[]
 
-  @@unique([employeeId, date])
-  @@index([date])
+  @@unique([employeeId, weekStart])
+  @@index([weekStart])
 }
 
 // Cada correção guarda os valores anteriores, preservando o original.
-model DailyMetricRevision {
+model WeeklyMetricRevision {
   id               String   @id @default(uuid(7)) @db.Uuid
   metricId         String   @db.Uuid
   ticketsHandled   Int
@@ -341,7 +346,7 @@ model DailyMetricRevision {
   changedById      String?  @db.Uuid
   createdAt        DateTime @default(now())
 
-  metric DailyMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  metric WeeklyMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
 
   @@index([metricId, createdAt])
 }

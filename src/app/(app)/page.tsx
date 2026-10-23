@@ -8,7 +8,7 @@ import { today } from "@/lib/page";
 import { addDays, addMonths, formatDate, formatMonth, formatTime, monthKey, monthRange, parseMonthKey, startOfMonth, toDateKey } from "@/lib/dates";
 import { readParams } from "@/lib/validation";
 import { loadDashboard } from "@/modules/dashboard/service";
-import { pctChange } from "@/modules/metrics/service";
+import { pctChange, weekStartOf } from "@/modules/metrics/service";
 import { employeeOptions } from "@/modules/employees/service";
 import { Badge, EmptyState, Panel, Stat } from "@/components/ui/primitives";
 import { CountBars, MetricTrend } from "@/components/charts/metric-trend";
@@ -52,12 +52,12 @@ export default async function DashboardPage(props: PageProps<"/">) {
   ]);
   const hasMetrics = data.metrics ? data.metrics.series.some((s) => s.tickets !== null) : false;
   const periodLabel = `${formatMonth(fromMonth)} – ${formatMonth(toMonth)}`;
-  const yesterday = addDays(t, -1);
+  const lastWeek = addDays(weekStartOf(t), -7);
   const attention =
-    (data.attendance?.pendingReview ?? 0) + (data.followUps?.length ?? 0) + (data.withoutSchedule?.length ?? 0) + (data.metrics?.missingYesterday.length ?? 0);
+    (data.attendance?.pendingReview ?? 0) + (data.followUps?.length ?? 0) + (data.withoutSchedule?.length ?? 0) + (data.metrics?.missingLastWeek.length ?? 0);
 
   const shortcuts = [
-    can(actor, "metrics:write") && { href: "/desempenho/lancar", label: "Lançar métricas do dia", icon: LineChart },
+    can(actor, "metrics:write") && { href: "/desempenho/lancar", label: "Lançar métricas da semana", icon: LineChart },
     can(actor, "attendance:write") && { href: "/frequencia/ocorrencias/nova", label: "Registrar ocorrência", icon: FileWarning },
     can(actor, "employees:write") && { href: "/colaboradores/novo", label: "Novo colaborador", icon: UserPlus },
     can(actor, "meetings:write") && { href: "/reunioes/nova", label: "Nova reunião", icon: CalendarPlus },
@@ -148,7 +148,7 @@ export default async function DashboardPage(props: PageProps<"/">) {
               <EmptyState
                 icon={<LineChart className="size-5" />}
                 title="Nenhuma métrica no período"
-                description="Os gráficos usam apenas lançamentos reais. Lance as métricas do dia para acompanhar a evolução."
+                description="Os gráficos usam apenas lançamentos reais. Lance as métricas da semana para acompanhar a evolução."
                 action={can(actor, "metrics:write") ? <Link href="/desempenho/lancar" className="btn btn-primary">Lançar métricas</Link> : null}
               />
             )}
@@ -162,14 +162,14 @@ export default async function DashboardPage(props: PageProps<"/">) {
             </div>
           ) : (
             <ul className="flex flex-col divide-y divide-line">
-              {data.metrics?.missingYesterday.length ? (
+              {data.metrics?.missingLastWeek.length ? (
                 <li className="flex items-start gap-3 py-3 first:pt-0">
                   <LineChart className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
                   <span className="text-sm">
-                    <Link href={`/desempenho/lancar?data=${toDateKey(yesterday)}`} className="link">
-                      {data.metrics.missingYesterday.length} colaborador(es) com turno ontem sem métricas
+                    <Link href={`/desempenho/lancar?semana=${toDateKey(lastWeek)}`} className="link">
+                      {data.metrics.missingLastWeek.length} colaborador(es) sem métricas da semana passada
                     </Link>
-                    <span className="block text-xs text-subtle">{data.metrics.missingYesterday.slice(0, 3).map((e) => e.fullName).join(", ")}{data.metrics.missingYesterday.length > 3 ? "…" : ""}</span>
+                    <span className="block text-xs text-subtle">{data.metrics.missingLastWeek.slice(0, 3).map((e) => e.fullName).join(", ")}{data.metrics.missingLastWeek.length > 3 ? "…" : ""}</span>
                   </span>
                 </li>
               ) : null}

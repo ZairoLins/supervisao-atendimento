@@ -26,7 +26,7 @@ export async function seedSystemData(db: PrismaClient) {
         weekdays: s.weekdays,
         cycleDays: s.cycleDays,
         workOffsets: s.workOffsets,
-        segments: { create: s.segments.map((seg, i) => ({ position: i, ...seg })) },
+        segments: { create: s.segments.map((seg, i) => ({ position: i, startMinute: seg.startMinute, endMinute: seg.endMinute, weekday: "weekday" in seg ? seg.weekday : null })) },
       },
     });
   }

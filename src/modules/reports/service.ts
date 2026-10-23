@@ -1,13 +1,14 @@
 import { z } from "zod";
 import type { Db } from "@/lib/db";
 import { audit } from "@/lib/audit";
-import { addMonths, dayNumber, endOfMonth, formatDate, formatDuration, formatMonth, formatTimeRange, isValidDateKey, parseDateKey, startOfMonth } from "@/lib/dates";
+import { addDays, addMonths, dayNumber, endOfMonth, formatDate, formatDuration, formatMonth, formatTimeRange, isValidDateKey, parseDateKey, startOfMonth } from "@/lib/dates";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, MEETING_TYPE, REVIEW_STATUS } from "@/lib/labels";
 import { assertCan, can, type Actor } from "@/lib/permissions";
 import { formatCode } from "@/lib/text";
 import { teamAttendanceSummary } from "@/modules/attendance/occurrences";
-import { combine, metricSeries, pctChange } from "@/modules/metrics/service";
+import { combine, metricSeries, pctChange, weekLabel, weeklyReportData, weekStartOf } from "@/modules/metrics/service";
+import type { WeeklyReport } from "./weekly";
 import { REPORT_KINDS, REPORT_LABELS, type ReportData, type ReportKind } from "./types";
 
 const dateParam = z
@@ -29,6 +30,7 @@ export const reportParamsSchema = z
     observacoes: z.enum(["1"]).optional(),
     confirmar: z.enum(["1"]).optional(),
     detalhes: z.enum(["1"]).optional(),
+    semana: dateParam,
   })
   .refine((v) => !v.de || !v.ate || dayNumber(v.de) <= dayNumber(v.ate), { message: "A data inicial deve ser anterior à final.", path: ["de"] })
   .refine((v) => !v.de || !v.ate || dayNumber(v.ate) - dayNumber(v.de) <= 366 * 3, { message: "Período máximo de 3 anos.", path: ["ate"] });
@@ -52,19 +54,20 @@ async function employeeName(db: Db, id?: string) {
   return e.fullName;
 }
 
-const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today: Date) => Promise<ReportData>> = {
+const builders: Record<Exclude<ReportKind, "semanal">, (db: Db, actor: Actor, p: ReportParams, today: Date) => Promise<ReportData>> = {
   async metricas(db, actor, p, today) {
     assertCan(actor, "metrics:read");
     const { from, to } = defaultPeriod(p, today, 0);
-    if (dayNumber(to) - dayNumber(from) > 370) throw new ValidationError("Para métricas diárias, use um período de até 12 meses.", { ate: "Período longo demais." });
-    const rows = await db.dailyMetric.findMany({
+    if (dayNumber(to) - dayNumber(from) > 740) throw new ValidationError("Use um período de até 24 meses.", { ate: "Período longo demais." });
+    const rows = await db.weeklyMetric.findMany({
       where: {
-        date: { gte: from, lte: to },
+        // Semanas cuja sexta-feira cai no período
+        weekStart: { gte: addDays(from, -4), lte: addDays(to, -4) },
         ...(p.colaborador ? { employeeId: p.colaborador } : {}),
         ...(p.categoria ? { teamSnapshot: p.categoria } : {}),
       },
       include: { employee: { select: { fullName: true, code: true } }, _count: { select: { revisions: true } } },
-      orderBy: [{ date: "asc" }, { employee: { fullName: "asc" } }],
+      orderBy: [{ weekStart: "asc" }, { employee: { fullName: "asc" } }],
     });
     const total = combine(rows);
     const name = await employeeName(db, p.colaborador);
@@ -73,7 +76,7 @@ const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today
       meta: [periodLabel(from, to), ...(name ? [`Colaborador: ${name}`] : []), ...(p.categoria ? [`Equipe: ${p.categoria}`] : [])],
       generatedAt: new Date(),
       columns: [
-        { key: "date", header: "Data", width: 11 },
+        { key: "date", header: "Semana", width: 18 },
         { key: "code", header: "ID", width: 10 },
         { key: "name", header: "Colaborador", width: 30 },
         { key: "team", header: "Equipe", width: 18 },
@@ -84,7 +87,7 @@ const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today
         { key: "notes", header: "Observações", width: 36 },
       ],
       rows: rows.map((r) => ({
-        date: formatDate(r.date),
+        date: weekLabel(r.weekStart),
         code: formatCode("employee", r.employee.code),
         name: r.employee.fullName,
         team: r.teamSnapshot,
@@ -303,8 +306,27 @@ const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today
   },
 };
 
+/** Relatório semanal com design próprio (PDF/Excel em ./weekly). */
+export async function buildWeeklyReport(db: Db, actor: Actor, params: ReportParams, today: Date): Promise<WeeklyReport> {
+  if (!can(actor, "reports:export")) throw new ForbiddenError();
+  assertCan(actor, "metrics:read");
+  const week = weekStartOf(params.semana ?? params.de ?? today);
+  const scope = { employeeId: params.colaborador, team: params.categoria };
+  const data = await weeklyReportData(db, actor, week, scope);
+  const name = await employeeName(db, params.colaborador);
+  await audit(db, {
+    actorId: actor.id,
+    action: "EXPORT",
+    entityType: "Report",
+    entityId: "semanal",
+    summary: `Relatório semanal ${weekLabel(data.weekStart)} exportado (${params.formato.toUpperCase()}, ${data.rows.length} colaboradores)`,
+  });
+  return { ...data, scopeLabel: name ?? (params.categoria ? `Equipe ${params.categoria}` : "Toda a equipe"), generatedAt: new Date() };
+}
+
 export async function buildReport(db: Db, actor: Actor, params: ReportParams, today: Date): Promise<ReportData> {
   if (!can(actor, "reports:export")) throw new ForbiddenError();
+  if (params.tipo === "semanal") throw new ValidationError("Use buildWeeklyReport para o relatório semanal.");
   const report = await builders[params.tipo](db, actor, params, today);
   await audit(db, {
     actorId: actor.id,

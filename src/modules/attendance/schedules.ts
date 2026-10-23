@@ -14,6 +14,7 @@ import {
   type AdjustmentRule,
   type AssignmentRule,
   type Segment,
+  type ScheduleSegment,
 } from "./rules";
 import { occurrenceSearchText } from "./occurrences";
 
@@ -35,6 +36,11 @@ const scheduleBase = z.object({
   end2: optionalTimeField(),
   start3: optionalTimeField(),
   end3: optionalTimeField(),
+  // Horário específico de sábado e domingo (jornada semanal)
+  satStart: optionalTimeField(),
+  satEnd: optionalTimeField(),
+  sunStart: optionalTimeField(),
+  sunEnd: optionalTimeField(),
 });
 
 /** Converte o formulário em regra validada (trechos podem atravessar a meia-noite). */
@@ -54,7 +60,25 @@ export function parseScheduleInput(raw: unknown) {
   segments.sort((a, b) => a.startMinute - b.startMinute);
   const err = validateSegments(segments);
   if (err) throw new ValidationError(err, { start1: err });
-  if (v.kind === "WEEKLY" && v.weekdays.length === 0) throw new ValidationError("Selecione os dias da semana.", { weekdays: "Selecione ao menos um dia." });
+
+  // Sábado/domingo com horário próprio (substitui os períodos comuns naquele dia)
+  const specific: ScheduleSegment[] = [];
+  const weekdays = new Set(v.weekdays);
+  if (v.kind === "WEEKLY") {
+    for (const [wd, st, en, field] of [
+      [6, v.satStart, v.satEnd, "satStart"],
+      [0, v.sunStart, v.sunEnd, "sunStart"],
+    ] as const) {
+      if (!st && !en) continue;
+      if (!st || !en) throw new ValidationError("Informe início e fim do horário específico.", { [field]: "Período incompleto." });
+      const r = timeRangeFromInputs(st, en);
+      const e2 = validateSegments([r]);
+      if (e2) throw new ValidationError(e2, { [field]: e2 });
+      specific.push({ ...r, weekday: wd });
+      weekdays.add(wd);
+    }
+  }
+  if (v.kind === "WEEKLY" && weekdays.size === 0) throw new ValidationError("Selecione os dias da semana.", { weekdays: "Selecione ao menos um dia." });
   if (v.kind === "ROTATION") {
     if (!v.cycleDays) throw new ValidationError("Informe o tamanho do ciclo.", { cycleDays: "Obrigatório para revezamento." });
     if (v.workOffsets.length === 0 || v.workOffsets.some((o) => o >= v.cycleDays!)) {
@@ -65,10 +89,10 @@ export function parseScheduleInput(raw: unknown) {
     name: v.name,
     description: v.description ?? null,
     kind: v.kind,
-    weekdays: v.kind === "WEEKLY" ? [...new Set(v.weekdays)].sort() : [],
+    weekdays: v.kind === "WEEKLY" ? [...weekdays].sort((a, b) => a - b) : [],
     cycleDays: v.kind === "ROTATION" ? v.cycleDays! : null,
     workOffsets: v.kind === "ROTATION" ? [...new Set(v.workOffsets)].sort() : [],
-    segments,
+    segments: [...segments.map((x) => ({ ...x, weekday: null })), ...specific] as ScheduleSegment[],
   };
 }
 
@@ -222,6 +246,40 @@ export async function endAssignment(db: Db, actor: Actor, id: string, raw: unkno
   });
 }
 
+/**
+ * Exclui uma vigência lançada por engano. Se ela foi a última e encerrou automaticamente
+ * a anterior, a anterior volta a valer com o mesmo fim que a excluída tinha.
+ * Ocorrências e ajustes não são apagados; o registro fica na auditoria.
+ */
+export async function deleteAssignment(db: Db, actor: Actor, id: string) {
+  assertCan(actor, "attendance:write");
+  return db.$transaction(
+    async (tx) => {
+      const a = await tx.employeeScheduleAssignment.findUnique({ where: { id }, include: { schedule: { select: { name: true } } } });
+      if (!a) throw new NotFoundError("Atribuição não encontrada.");
+      const all = await tx.employeeScheduleAssignment.findMany({ where: { employeeId: a.employeeId }, orderBy: { validFrom: "asc" } });
+      const isLatest = all[all.length - 1]?.id === a.id;
+      const previous = all.filter((x) => dayNumber(x.validFrom) < dayNumber(a.validFrom)).at(-1);
+      await tx.employeeScheduleAssignment.delete({ where: { id } });
+      let reopened = false;
+      if (isLatest && previous?.validTo && dayNumber(previous.validTo) === dayNumber(a.validFrom) - 1) {
+        await tx.employeeScheduleAssignment.update({ where: { id: previous.id }, data: { validTo: a.validTo } });
+        reopened = true;
+      }
+      await audit(tx, {
+        actorId: actor.id,
+        action: "DELETE_SCHEDULE",
+        entityType: "Employee",
+        entityId: a.employeeId,
+        summary: `Vigência "${a.schedule.name}" de ${formatDate(a.validFrom)} excluída${reopened ? " (vigência anterior reaberta)" : ""}`,
+        before: a,
+      });
+      return { employeeId: a.employeeId, reopened };
+    },
+    { isolationLevel: "Serializable" },
+  );
+}
+
 // ───────────── Carregamento das regras ─────────────
 
 export async function loadRules(db: Db | Tx, employeeId: string): Promise<{ assignments: AssignmentRule[]; adjustments: AdjustmentRule[] }> {
@@ -246,7 +304,7 @@ export async function loadRules(db: Db | Tx, employeeId: string): Promise<{ assi
         weekdays: a.schedule.weekdays,
         cycleDays: a.schedule.cycleDays,
         workOffsets: a.schedule.workOffsets,
-        segments: a.schedule.segments.map((s) => ({ startMinute: s.startMinute, endMinute: s.endMinute })),
+        segments: a.schedule.segments.map((s) => ({ startMinute: s.startMinute, endMinute: s.endMinute, weekday: s.weekday })),
       },
     })),
     adjustments: adjustments.map((a) => ({

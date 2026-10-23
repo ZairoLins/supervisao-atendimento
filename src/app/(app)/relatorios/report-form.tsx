@@ -94,11 +94,18 @@ export function ReportForm({
         </div>
       </fieldset>
 
-      <div>
+      {kind === "semanal" ? (
+        <div className="md:col-span-2">
+          <label className="label" htmlFor="r-sem">Semana (escolha qualquer dia dela)</label>
+          <input id="r-sem" type="date" name="semana" className="input max-w-xs" />
+          <p className="mt-1.5 text-xs text-subtle">Em branco: semana atual. O PDF abre em uma nova aba, pronto para imprimir ou compartilhar.</p>
+        </div>
+      ) : null}
+      <div className={kind === "semanal" ? "hidden" : undefined}>
         <label className="label" htmlFor="r-de">{"Período — de"}</label>
         <input id="r-de" type="date" name="de" className="input" />
       </div>
-      <div>
+      <div className={kind === "semanal" ? "hidden" : undefined}>
         <label className="label" htmlFor="r-ate">{"Período — até"}</label>
         <input id="r-ate" type="date" name="ate" className="input" />
         <p className="mt-1.5 text-xs text-subtle">Em branco: período padrão do relatório.</p>
@@ -121,7 +128,7 @@ export function ReportForm({
       ) : <div className="hidden md:block" />}
       {categoryOptions ? (
         <div>
-          <label className="label" htmlFor="r-cat">{kind === "metricas" ? "Equipe" : kind === "frequencia" ? "Tipo de ocorrência" : "Tipo"}</label>
+          <label className="label" htmlFor="r-cat">{kind === "metricas" || kind === "semanal" ? "Equipe" : kind === "frequencia" ? "Tipo de ocorrência" : "Tipo"}</label>
           <select id="r-cat" name="categoria" className="input" key={`c-${kind}`}>
             <option value="">Todos</option>
             {categoryOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
