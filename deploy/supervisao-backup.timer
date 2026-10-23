@@ -3,7 +3,7 @@
 Description=Agenda o backup diário da Supervisão de Atendimento
 
 [Timer]
-OnCalendar=*-*-* 02:30:00
+OnCalendar=*-*-* 02:30:00 America/Sao_Paulo
 RandomizedDelaySec=10m
 Persistent=true
 
