@@ -3,7 +3,6 @@
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
 import { ValidationError } from "@/lib/errors";
-import { createTask } from "@/modules/tasks/service";
 import {
   addAgendaItem,
   addDecision,
@@ -98,14 +97,6 @@ export async function setAttendanceAction(meetingId: string, _: ActionState, fd:
   return runAction(fd, async (actor) => {
     await setAttendance(db, actor, meetingId, formToObject(fd, ["attended"]));
     return { message: "Presenças registradas.", revalidate: [path(meetingId)] };
-  });
-}
-
-/** Encaminhamento: cria tarefa vinculada à reunião, com responsável e prazo. */
-export async function addMeetingTaskAction(meetingId: string, _: ActionState, fd: FormData) {
-  return runAction(fd, async (actor) => {
-    await createTask(db, actor, { ...formToObject(fd), meetingId });
-    return { message: "Ação criada como tarefa vinculada.", revalidate: [path(meetingId), "/tarefas", "/"] };
   });
 }
 

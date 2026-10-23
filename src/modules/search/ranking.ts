@@ -28,6 +28,17 @@ export function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Interpreta termos como "23/10/2026" ou "2026-10-23" como dia. */
+export function parseDayQuery(query: string): Date | null {
+  const q = query.trim();
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(q) ?? null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(q);
+  const [y, mo, d] = m ? [Number(m[3]), Number(m[2]), Number(m[1])] : iso ? [Number(iso[1]), Number(iso[2]), Number(iso[3])] : [0, 0, 0];
+  if (!y) return null;
+  const date = new Date(Date.UTC(y, mo - 1, d));
+  return date.getUTCMonth() === mo - 1 && date.getUTCDate() === d ? date : null;
+}
+
 /** Interpreta termos como "10/2026", "out/2026" ou "2026-10" como mês. */
 export function parseMonthQuery(query: string): Date | null {
   const q = normalizeText(query);

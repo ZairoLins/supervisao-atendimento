@@ -12,7 +12,7 @@ export async function seedSystemData(db: PrismaClient) {
     await db.occurrenceType.upsert({
       where: { code: t.code },
       create: { ...t, isSystem: true },
-      update: { isSystem: true },
+      update: { isSystem: true, timeMode: t.timeMode },
     });
   }
   for (const s of DEFAULT_SCHEDULES) {

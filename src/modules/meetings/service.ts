@@ -240,11 +240,6 @@ export async function getMeeting(db: Db, actor: Actor, id: string) {
       agendaItems: { orderBy: { position: "asc" } },
       decisions: { orderBy: { position: "asc" } },
       participants: { include: { employee: { select: { id: true, fullName: true, code: true, status: true } } }, orderBy: { employee: { fullName: "asc" } } },
-      tasks: {
-        where: { deletedAt: null },
-        include: { assigneeEmployee: { select: { fullName: true } }, assigneeUser: { select: { name: true } } },
-        orderBy: [{ status: "asc" }, { dueDate: "asc" }],
-      },
       series: true,
     },
   });
@@ -274,7 +269,7 @@ export async function listMeetings(db: Db, actor: Actor, f: MeetingFilters, toda
     db.meeting.count({ where }),
     db.meeting.findMany({
       where,
-      include: { _count: { select: { agendaItems: true, participants: true, tasks: { where: { deletedAt: null } } } } },
+      include: { _count: { select: { agendaItems: true, participants: true, decisions: true } } },
       orderBy: [{ date: asc ? "asc" : "desc" }, { startMinute: asc ? "asc" : "desc" }],
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { can, type Permission } from "@/lib/permissions";
-import { FEEDBACK_TYPE, MEETING_TYPE, TASK_PRIORITY, options } from "@/lib/labels";
+import { FEEDBACK_TYPE, MEETING_TYPE, options } from "@/lib/labels";
 import { REPORT_KINDS, type ReportKind } from "@/modules/reports/types";
 import { distinctTeamsAndTitles, employeeOptions } from "@/modules/employees/service";
 import { listOccurrenceTypes } from "@/modules/attendance/occurrences";
@@ -16,7 +16,6 @@ const REQUIRED: Record<ReportKind, Permission> = {
   desempenho: "metrics:read",
   frequencia: "attendance:read",
   reunioes: "meetings:read",
-  tarefas: "tasks:read",
   feedbacks: "feedbacks:read",
 };
 
@@ -43,7 +42,6 @@ export default async function ReportsPage() {
             metricas: teams.map((t) => ({ value: t, label: t })),
             frequencia: types.map((t) => ({ value: t.name, label: t.name })),
             reunioes: options(MEETING_TYPE),
-            tarefas: options(TASK_PRIORITY),
             feedbacks: options(FEEDBACK_TYPE),
           }}
         />

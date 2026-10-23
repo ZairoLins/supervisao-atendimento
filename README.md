@@ -1,8 +1,8 @@
 # Supervisão de Atendimento
 
-Aplicação web interna, em português, que centraliza a rotina do supervisor de uma equipe de atendimento: colaboradores, frequência e escalas (incluindo 12x36), métricas mensais, reuniões e atas, feedbacks, anotações, tarefas, relatórios Excel/PDF e **pesquisa global** (Ctrl/⌘+K) em todos os módulos.
+Aplicação web interna, em português, que centraliza a rotina do supervisor de uma equipe de atendimento: colaboradores, frequência e escalas (incluindo 12x36), métricas lançadas diariamente, reuniões e atas, feedbacks, anotações, relatórios Excel/PDF e **pesquisa global** (Ctrl/⌘+K) em todos os módulos.
 
-Visual baseado na referência *ORYZO AI — Style Reference*, adaptada para software administrativo (fundo Walnut Shadow, tipografia Warm Cream, superfícies Bark Brown, divisórias tracejadas Cork Border e o laranja Ember apenas como acento).
+Visual moderno em azul, branco e preto: navegação lateral preta, conteúdo em cartões brancos e azul como cor de ação e destaque.
 
 ## Stack
 
@@ -66,4 +66,5 @@ Veja [.env.example](.env.example). Obrigatórias: `DATABASE_URL`, `SESSION_SECRE
 - Uso inicial por um único supervisor (perfil `SUPERVISOR`); existe o perfil `ASSISTANT` (auxiliar, sem acesso a frequência, feedbacks, anotações e auditoria) para comprovar a autorização por módulo e uso futuro.
 - Horários são de parede no fuso `APP_TIMEZONE`; datas são de calendário (sem fuso). Plantões que atravessam a meia-noite pertencem à data de início.
 - O controle de frequência é **gerencial**: não calcula descontos salariais nem avalia a validade jurídica de atestados.
-- Métricas são lançadas manualmente, uma por colaborador e mês; correções preservam os valores anteriores.
+- Métricas são lançadas por dia (um lançamento por colaborador e dia, em lote para toda a equipe); visões mensais somam os dias; correções preservam os valores anteriores.
+- Atraso e saída antecipada pedem só a hora de chegada/saída; o restante do período vem da escala do colaborador.

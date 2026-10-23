@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
 import { assertUuid, orNotFound } from "@/lib/page";
 import { formatDate } from "@/lib/dates";
-import { FEEDBACK_STATUS, FEEDBACK_TYPE, TASK_STATUS } from "@/lib/labels";
+import { FEEDBACK_STATUS, FEEDBACK_TYPE } from "@/lib/labels";
 import { formatCode } from "@/lib/text";
 import { readParams } from "@/lib/validation";
 import { getFeedback } from "@/modules/feedbacks/service";
@@ -41,8 +41,8 @@ export default async function FeedbackPage(props: PageProps<"/feedbacks/[id]">) 
         actions={canWrite ? <Link href={`/feedbacks/${id}/editar`} className="btn btn-secondary"><Pencil className="size-3.5" aria-hidden /> Editar</Link> : null}
       />
       {params.salvo ? <div className="mb-6"><Notice tone="ok">Feedback salvo.</Notice></div> : null}
-      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[3fr_2fr]">
-        <div className="flex flex-col gap-[18px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
+        <div className="flex flex-col gap-5">
           <Panel>
             <div className="flex flex-col gap-6">
               <Block label="Contexto profissional" value={fb.context} />
@@ -57,7 +57,7 @@ export default async function FeedbackPage(props: PageProps<"/feedbacks/[id]">) 
           </Panel>
           <AuditTrail actor={actor} entityType="Feedback" entityId={fb.id} />
         </div>
-        <div className="flex flex-col gap-[18px]">
+        <div className="flex flex-col gap-5">
           <Panel title="Acompanhamento">
             <DescriptionList
               items={[
@@ -68,20 +68,6 @@ export default async function FeedbackPage(props: PageProps<"/feedbacks/[id]">) 
               ]}
             />
           </Panel>
-          {can(actor, "tasks:read") ? (
-            <Panel
-              title="Tarefas vinculadas"
-              actions={can(actor, "tasks:write") ? <Link href={`/tarefas/nova?feedback=${fb.id}&colaborador=${fb.employeeId}`} className="btn btn-secondary btn-sm"><Plus className="size-3.5" aria-hidden /> Tarefa</Link> : null}
-            >
-              {fb.tasks.length === 0 ? <p className="text-sm text-muted">Nenhuma tarefa vinculada.</p> : (
-                <ul className="flex flex-col gap-2 text-sm">
-                  {fb.tasks.map((task) => (
-                    <li key={task.id} className="flex flex-wrap items-center gap-2"><Link className="link" href={`/tarefas/${task.id}`}>{task.title}</Link><LabelBadge map={TASK_STATUS} value={task.status} /></li>
-                  ))}
-                </ul>
-              )}
-            </Panel>
-          ) : null}
           {canWrite ? (
             <Panel title="Excluir">
               <ActionForm action={deleteFeedbackAction.bind(null, id)} className="flex flex-col gap-3">

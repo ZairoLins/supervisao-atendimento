@@ -77,7 +77,7 @@ export async function getFeedback(db: Db, actor: Actor, id: string) {
   assertCan(actor, "feedbacks:read");
   const fb = await db.feedback.findUnique({
     where: { id },
-    include: { employee: { select: { id: true, fullName: true, code: true } }, tasks: { where: { deletedAt: null }, orderBy: { createdAt: "asc" } } },
+    include: { employee: { select: { id: true, fullName: true, code: true } } },
   });
   if (!fb || fb.deletedAt) throw new NotFoundError("Feedback não encontrado.");
   return fb;

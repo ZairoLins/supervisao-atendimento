@@ -4,17 +4,15 @@ import { ArrowDown, ArrowUp, Check, Pencil, Trash2, Undo2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
-import { assertUuid, orNotFound, today } from "@/lib/page";
+import { assertUuid, orNotFound } from "@/lib/page";
 import { formatDate, formatTime } from "@/lib/dates";
-import { MEETING_STATUS, MEETING_TYPE, TASK_PRIORITY, TASK_STATUS, options } from "@/lib/labels";
+import { MEETING_STATUS, MEETING_TYPE } from "@/lib/labels";
 import { formatCode } from "@/lib/text";
 import { readParams } from "@/lib/validation";
 import { getMeeting } from "@/modules/meetings/service";
-import { assigneeOptions, isOverdue } from "@/modules/tasks/service";
 import {
   addAgendaItemAction,
   addDecisionAction,
-  addMeetingTaskAction,
   agendaCommandAction,
   deleteMeetingAction,
   removeDecisionAction,
@@ -22,7 +20,7 @@ import {
   setAttendanceAction,
   templateFromMeetingAction,
 } from "@/modules/meetings/actions";
-import { ActionForm, CheckboxField, CheckboxGroup, FormMessage, Hidden, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
+import { ActionForm, CheckboxField, CheckboxGroup, FormMessage, Hidden, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
 import { Badge, LabelBadge, Notice, PageHeader, Panel } from "@/components/ui/primitives";
 
 export const metadata: Metadata = { title: "Reunião" };
@@ -33,9 +31,6 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
   const params = readParams(await props.searchParams);
   const m = await orNotFound(getMeeting(db, actor, id));
   const canWrite = can(actor, "meetings:write");
-  const canTask = can(actor, "tasks:write");
-  const assignees = canTask ? await assigneeOptions(db, actor) : [];
-  const t = today();
 
   return (
     <>
@@ -54,18 +49,18 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
       />
       {params.salvo ? <div className="mb-6"><Notice tone="ok">Reunião salva.</Notice></div> : null}
 
-      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[3fr_2fr]">
-        <div className="flex flex-col gap-[18px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
+        <div className="flex flex-col gap-5">
           {/* 1. Pauta planejada */}
           <section id="pauta" className="scroll-mt-24">
             <Panel title="1 · Pauta planejada" description="O que se planejou discutir.">
               {m.agendaItems.length === 0 ? <p className="mb-4 text-sm text-muted">Pauta vazia.</p> : (
                 <ol className="mb-5 flex flex-col">
                   {m.agendaItems.map((item, idx) => (
-                    <li key={item.id} className="flex items-start gap-3 border-b border-dashed border-cork py-3 first:pt-0 last:border-0">
+                    <li key={item.id} className="flex items-start gap-3 border-b border-line py-3 first:pt-0 last:border-0">
                       <span className="w-6 shrink-0 pt-0.5 text-xs tabular-nums text-subtle">{idx + 1}.</span>
                       <div className="min-w-0 flex-1">
-                        <p className={item.discussed ? "text-muted line-through decoration-driftwood" : ""}>{item.title}</p>
+                        <p className={item.discussed ? "text-muted line-through decoration-line-strong" : ""}>{item.title}</p>
                         {item.description ? <p className="mt-0.5 text-xs text-subtle">{item.description}</p> : null}
                         {item.discussed ? <span className="mt-1 inline-block"><Badge tone="ok">Discutido</Badge></span> : null}
                       </div>
@@ -116,8 +111,7 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
           </Panel>
 
           {/* 3. Decisões e encaminhamentos */}
-          <Panel title="3 · Decisões e encaminhamentos" description="Ações definidas viram tarefas com responsável e prazo.">
-            <p className="eyebrow mb-3">Decisões</p>
+          <Panel title="3 · Decisões e encaminhamentos" description="O que ficou decidido e os próximos passos combinados.">
             {m.decisions.length === 0 ? <p className="mb-4 text-sm text-muted">Nenhuma decisão registrada.</p> : (
               <ul className="mb-5 flex flex-col gap-2">
                 {m.decisions.map((d) => (
@@ -133,43 +127,17 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
               </ul>
             )}
             {canWrite ? (
-              <ActionForm action={addDecisionAction.bind(null, id)} resetOnSuccess className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                <TextField name="description" label="Nova decisão" required maxLength={1000} />
+              <ActionForm action={addDecisionAction.bind(null, id)} resetOnSuccess className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                <TextField name="description" label="Nova decisão ou encaminhamento" required maxLength={1000} />
                 <SubmitButton variant="secondary" className="btn-sm">Registrar</SubmitButton>
                 <div className="sm:col-span-2"><FormMessage /></div>
               </ActionForm>
             ) : null}
 
-            <hr className="divider my-6" />
-            <p className="eyebrow mb-3">Ações (tarefas vinculadas)</p>
-            {m.tasks.length === 0 ? <p className="mb-4 text-sm text-muted">Nenhuma ação definida.</p> : (
-              <ul className="mb-5 flex flex-col gap-3">
-                {m.tasks.map((task) => (
-                  <li key={task.id} className="flex flex-wrap items-center gap-2 text-sm">
-                    <Link className="link" href={`/tarefas/${task.id}`}>{task.title}</Link>
-                    <LabelBadge map={TASK_STATUS} value={task.status} />
-                    <span className="text-xs text-subtle">
-                      {task.assigneeEmployee?.fullName ?? task.assigneeUser?.name ?? "Sem responsável"} · {task.dueDate ? `prazo ${formatDate(task.dueDate)}` : "sem prazo"}
-                    </span>
-                    {isOverdue(task, t) ? <Badge tone="danger">Atrasada</Badge> : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {canTask ? (
-              <ActionForm action={addMeetingTaskAction.bind(null, id)} resetOnSuccess className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <TextField name="title" label="Nova ação" required className="sm:col-span-2" maxLength={200} />
-                <SelectField name="assignee" label="Responsável" options={assignees} placeholder="Sem responsável" />
-                <TextField name="dueDate" label="Prazo" type="date" />
-                <SelectField name="priority" label="Prioridade" options={options(TASK_PRIORITY)} defaultValue="MEDIUM" />
-                <div className="flex items-end"><SubmitButton variant="secondary" className="btn-sm">Criar ação</SubmitButton></div>
-                <div className="sm:col-span-2"><FormMessage /></div>
-              </ActionForm>
-            ) : null}
           </Panel>
         </div>
 
-        <div className="flex flex-col gap-[18px]">
+        <div className="flex flex-col gap-5">
           <Panel title="Participantes">
             {m.participants.length === 0 ? <p className="text-sm text-muted">Nenhum participante definido.</p> : canWrite ? (
               <ActionForm action={setAttendanceAction.bind(null, id)} className="flex flex-col gap-4">

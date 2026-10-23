@@ -17,7 +17,8 @@ describe("normalização de texto", () => {
   });
 
   it("reconhece identificadores", () => {
-    expect(parseCodeQuery("TAR-12")).toEqual({ entity: "task", code: 12 });
+    expect(parseCodeQuery("REU-12")).toEqual({ entity: "meeting", code: 12 });
+    expect(parseCodeQuery("TAR-12")).toBeNull();
     expect(parseCodeQuery("col 0003")).toEqual({ entity: "employee", code: 3 });
     expect(parseCodeQuery("#7")).toEqual({ entity: null, code: 7 });
     expect(parseCodeQuery("XYZ-1")).toBeNull();

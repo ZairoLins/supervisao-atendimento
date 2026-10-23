@@ -12,7 +12,6 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   if (can(actor, "attendance:read")) allowed.push("attendance");
   if (can(actor, "metrics:read")) allowed.push("metrics");
   if (can(actor, "feedbacks:read")) allowed.push("feedbacks");
-  if (can(actor, "tasks:read")) allowed.push("tasks");
   if (can(actor, "reports:export")) allowed.push("reports");
   allowed.push("settings");
 

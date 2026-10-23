@@ -6,7 +6,7 @@ import type { Db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ReviewStatus } from "@/generated/prisma/enums";
 import { audit } from "@/lib/audit";
-import { endOfMonth, formatDate, startOfMonth, timeRangeFromInputs, toDateKey } from "@/lib/dates";
+import { endOfMonth, formatDate, formatTime, formatTimeRange, parseTime, startOfMonth, timeRangeFromInputs, toDateKey } from "@/lib/dates";
 import { env } from "@/lib/env";
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertCan, can, type Actor } from "@/lib/permissions";
@@ -43,10 +43,53 @@ export function alignToShift(range: { startMinute: number; endMinute: number }, 
   return range;
 }
 
+export type TimeMode = "NONE" | "ARRIVAL" | "DEPARTURE" | "RANGE";
+
+/** Converte um horário avulso para a referência do turno (horários após a meia-noite em plantão noturno). */
+function alignTime(minute: number, shiftStart: number, shiftEnd: number): number {
+  return shiftEnd > 1440 && minute < shiftStart && minute + 1440 <= shiftEnd ? minute + 1440 : minute;
+}
+
+/**
+ * Monta o período da ocorrência conforme o modo do tipo:
+ *  - ARRIVAL (atraso): do início do turno até a hora de chegada informada;
+ *  - DEPARTURE (saída antecipada): da hora de saída informada até o fim do turno;
+ *  - RANGE (ausência parcial): início e fim informados;
+ *  - NONE: turno inteiro.
+ * Usa a escala efetiva do dia, então trocas e ajustes já são considerados.
+ */
+export function periodFromTimeMode(
+  mode: TimeMode,
+  plan: Pick<DayPlan, "effective">,
+  input: { time?: string; startTime?: string; endTime?: string },
+  dateLabel: string,
+): { startMinute: number | null; endMinute: number | null } {
+  if (mode === "NONE") return { startMinute: null, endMinute: null };
+  if (mode === "RANGE") {
+    if (!input.startTime || !input.endTime) throw new ValidationError("Informe o horário de início e de fim da ausência.", { startTime: "Obrigatório.", endTime: "Obrigatório." });
+    return alignToShift(timeRangeFromInputs(input.startTime, input.endTime), plan);
+  }
+  const label = mode === "ARRIVAL" ? "chegada" : "saída";
+  if (!input.time) throw new ValidationError(`Informe o horário de ${label}.`, { time: "Obrigatório." });
+  const segs = plan.effective.segments;
+  if (segs.length === 0) {
+    throw new ValidationError(`Não há turno previsto para este colaborador em ${dateLabel}. Confira a escala ou registre como ausência parcial.`, { time: "Sem turno previsto nesta data." });
+  }
+  const shiftStart = segs[0].startMinute;
+  const shiftEnd = segs[segs.length - 1].endMinute;
+  const shiftText = segs.map((s) => formatTimeRange(s.startMinute, s.endMinute)).join(" e ");
+  const t = alignTime(parseTime(input.time), shiftStart, shiftEnd);
+  if (t <= shiftStart || t >= shiftEnd) {
+    throw new ValidationError(`O turno previsto em ${dateLabel} é ${shiftText}. O horário de ${label} deve ficar entre ${formatTime(shiftStart)} e ${formatTime(shiftEnd)}.`, { time: "Fora do turno previsto." });
+  }
+  return mode === "ARRIVAL" ? { startMinute: shiftStart, endMinute: t } : { startMinute: t, endMinute: shiftEnd };
+}
+
 const occurrenceSchema = z.object({
   employeeId: uuidField("o colaborador"),
   typeId: uuidField("o tipo de ocorrência"),
   date: dateField(),
+  time: optionalTimeField(),
   startTime: optionalTimeField(),
   endTime: optionalTimeField(),
   adminNotes: optionalText(2000),
@@ -61,16 +104,8 @@ async function parseOccurrence(db: Db, actor: Actor, raw: unknown) {
   if (type.code === "TROCA_PLANTAO" || type.code === "AJUSTE_ESCALA") {
     throw new ValidationError("Trocas e ajustes são registrados pela escala do colaborador.", { typeId: "Use a tela de escala." });
   }
-  let startMinute: number | null = null;
-  let endMinute: number | null = null;
-  if (v.startTime || v.endTime) {
-    if (!v.startTime || !v.endTime) throw new ValidationError("Informe horário inicial e final.", { endTime: "Informe os dois horários." });
-    const r = alignToShift(timeRangeFromInputs(v.startTime, v.endTime), await planForDate(db, v.employeeId, v.date));
-    startMinute = r.startMinute;
-    endMinute = r.endMinute;
-  } else if (type.requiresTimeRange) {
-    throw new ValidationError(`"${type.name}" exige horário inicial e final.`, { startTime: "Obrigatório para este tipo." });
-  }
+  const plan = await planForDate(db, v.employeeId, v.date);
+  const { startMinute, endMinute } = periodFromTimeMode(type.timeMode, plan, v, formatDate(v.date));
   const restrictedNotes = can(actor, "attendance:restricted") ? (v.restrictedNotes ?? null) : undefined;
   return { v, type, startMinute, endMinute, restrictedNotes };
 }
@@ -230,7 +265,7 @@ export async function listOccurrenceTypes(db: Db, actor: Actor, opts: { includeI
 const typeSchema = z.object({
   name: requiredText("o nome", 80),
   countsAsAbsence: z.preprocess((v) => v === "on", z.boolean()),
-  requiresTimeRange: z.preprocess((v) => v === "on", z.boolean()),
+  timeMode: z.enum(["NONE", "ARRIVAL", "DEPARTURE", "RANGE"]).default("NONE"),
   isMedical: z.preprocess((v) => v === "on", z.boolean()),
 });
 

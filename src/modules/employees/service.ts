@@ -70,7 +70,7 @@ const inactivateSchema = z.object({
   reason: requiredText("o motivo da inativação", 500),
 });
 
-/** Inativa sem apagar históricos (frequência, métricas, feedbacks e tarefas permanecem). */
+/** Inativa sem apagar históricos (frequência, métricas, feedbacks e anotações permanecem). */
 export async function inactivateEmployee(db: Db, actor: Actor, id: string, raw: unknown) {
   assertCan(actor, "employees:write");
   const { reason } = inactivateSchema.parse(raw);

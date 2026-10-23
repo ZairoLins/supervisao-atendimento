@@ -29,7 +29,7 @@ export default async function SearchPage(props: PageProps<"/pesquisa">) {
         <form method="get" role="search" className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto] lg:items-end">
           <div>
             <label className="label" htmlFor="s-q">Termo</label>
-            <input id="s-q" name="q" defaultValue={q} className="input" placeholder="Pesquisar colaboradores, reuniões, métricas, tarefas..." autoFocus maxLength={100} />
+            <input id="s-q" name="q" defaultValue={q} className="input" placeholder="Pesquisar colaboradores, reuniões, métricas, ocorrências..." autoFocus maxLength={100} />
           </div>
           <div>
             <label className="label" htmlFor="s-tipo">Categoria</label>
@@ -44,7 +44,7 @@ export default async function SearchPage(props: PageProps<"/pesquisa">) {
         </form>
 
         {!result ? (
-          <EmptyState title="Digite um termo" description="Busque por nomes, títulos, palavras de pautas, meses (ex.: 10/2026) ou identificadores (COL-1, REU-3, TAR-12, OCO-5, FDB-2)." />
+          <EmptyState title="Digite um termo" description="Busque por nomes, títulos, palavras de pautas, meses (ex.: 10/2026) ou identificadores (COL-1, REU-3, OCO-5, FDB-2)." />
         ) : q.trim().length < MIN_QUERY_LENGTH && result.total === 0 ? (
           <EmptyState title="Termo muito curto" description={`Use ao menos ${MIN_QUERY_LENGTH} caracteres.`} />
         ) : result.total === 0 ? (
@@ -57,12 +57,12 @@ export default async function SearchPage(props: PageProps<"/pesquisa">) {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <h2 id={`g-${g.type}`} className="subheading">{g.label}</h2>
                   {g.hasMore && !type ? (
-                    <Link className="link text-xs uppercase" href={buildHref("/pesquisa", params, { tipo: g.type })}>Ver mais em {g.label.toLowerCase()}</Link>
+                    <Link className="link text-xs" href={buildHref("/pesquisa", params, { tipo: g.type })}>Ver mais em {g.label.toLowerCase()}</Link>
                   ) : null}
                 </div>
                 <ul className="flex flex-col">
                   {g.items.map((r) => (
-                    <li key={`${r.type}-${r.id}`} className="flex items-start justify-between gap-4 border-b border-dashed border-cork py-3 last:border-0">
+                    <li key={`${r.type}-${r.id}`} className="flex items-start justify-between gap-4 border-b border-line py-3 last:border-0">
                       <div className="min-w-0">
                         <Link href={r.url} className="link"><Highlight text={r.title} query={result.query} /></Link>
                         <p className="mt-1 text-xs text-subtle"><Highlight text={r.summary} query={result.query} /></p>

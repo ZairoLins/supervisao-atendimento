@@ -44,14 +44,14 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
       />
       <AttendanceNav active="escala" />
 
-      <div className="mb-[18px] grid grid-cols-2 gap-[18px] lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-5 lg:grid-cols-4">
         <Stat label="Turnos previstos (efetivos)" value={cal.summary.plannedDays} hint={`${cal.summary.offDays} dia(s) de folga`} />
         <Stat label="Horas previstas" value={formatDuration(cal.summary.plannedMinutes)} />
         <Stat label="Ausências" value={formatDuration(cal.summary.absenceMinutes)} hint="Sem dupla contagem" />
         <Stat label="Dias ajustados" value={cal.summary.adjustedDays} />
       </div>
 
-      <div className="grid grid-cols-1 gap-[18px] 2xl:grid-cols-[3fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[3fr_1fr]">
         <Panel
           title={formatMonthLong(month)}
           actions={
@@ -85,8 +85,8 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
                     role="gridcell"
                     className={cx(
                       "min-h-24 rounded-[10px] border p-2 text-[11px]",
-                      d.effective.isWorkDay ? "border-driftwood bg-surface-2" : "border-dashed border-cork",
-                      d.dateKey === todayKey && "outline outline-1 outline-ember",
+                      d.effective.isWorkDay ? "border-primary/30 bg-primary-soft" : "border-line bg-surface",
+                      d.dateKey === todayKey && "ring-2 ring-primary",
                     )}
                   >
                     <div className="flex items-center justify-between">
@@ -111,10 +111,10 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
               })}
             </div>
           </div>
-          <p className="mt-4 text-xs text-subtle">Borda contínua = dia de turno; tracejada = folga. Ajustes mostram também a escala prevista original.</p>
+          <p className="mt-4 text-xs text-subtle">Azul = dia de turno; branco = folga. Ajustes mostram também a escala prevista original.</p>
         </Panel>
 
-        <div className="flex flex-col gap-[18px]">
+        <div className="flex flex-col gap-5">
           {canWrite && cal.assignments.length > 0 ? (
             <Panel title="Troca ou ajuste" description="Não apaga a escala prevista.">
               <ActionForm action={createAdjustmentAction} resetOnSuccess className="flex flex-col gap-5">
@@ -153,7 +153,7 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
             ) : (
               <ul className="flex flex-col gap-4 text-sm">
                 {cal.adjustments.map((a) => (
-                  <li key={a.id} className="border-b border-dashed border-cork pb-4 last:border-0 last:pb-0">
+                  <li key={a.id} className="border-b border-line pb-4 last:border-0 last:pb-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="tabular-nums">{formatDate(a.date)}</span>
                       <Badge tone={ADJUSTMENT_KIND[a.kind].tone}>{ADJUSTMENT_KIND[a.kind].label}</Badge>
@@ -165,7 +165,7 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
                     {a.revokedReason ? <p className="mt-1 text-xs text-subtle">Revogação: {a.revokedReason}</p> : null}
                     {canWrite && !a.revokedAt ? (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-[11px] font-medium uppercase text-muted hover:text-cream">Revogar</summary>
+                        <summary className="cursor-pointer text-[11px] font-medium text-muted hover:text-ink">Revogar</summary>
                         <ActionForm action={revokeAdjustmentAction.bind(null, a.id)} className="mt-3 flex flex-col gap-3">
                           <TextField name="reason" label="Motivo da revogação" required maxLength={500} />
                           <SubmitButton variant="secondary" className="btn-sm self-start">Confirmar revogação</SubmitButton>
@@ -185,7 +185,7 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
             ) : (
               <ul className="flex flex-col gap-4 text-sm">
                 {[...cal.assignments].reverse().map((a) => (
-                  <li key={a.id} className="border-b border-dashed border-cork pb-4 last:border-0 last:pb-0">
+                  <li key={a.id} className="border-b border-line pb-4 last:border-0 last:pb-0">
                     <p>{a.schedule.name}</p>
                     <p className="mt-0.5 text-xs text-subtle">
                       {formatDate(a.validFrom)} — {a.validTo ? formatDate(a.validTo) : "atual"}
@@ -193,7 +193,7 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
                     </p>
                     {canWrite && !a.validTo ? (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-[11px] font-medium uppercase text-muted hover:text-cream">Encerrar vigência</summary>
+                        <summary className="cursor-pointer text-[11px] font-medium text-muted hover:text-ink">Encerrar vigência</summary>
                         <ActionForm action={endAssignmentAction.bind(null, a.id)} className="mt-3 flex flex-col gap-3">
                           <TextField name="validTo" label="Último dia" type="date" required />
                           <SubmitButton variant="secondary" className="btn-sm self-start">Encerrar</SubmitButton>
@@ -205,7 +205,7 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
                 ))}
               </ul>
             )}
-            {canWrite ? <Link href={`/frequencia/jornadas?colaborador=${id}`} className="link mt-4 inline-block text-xs uppercase">Nova atribuição</Link> : null}
+            {canWrite ? <Link href={`/frequencia/jornadas?colaborador=${id}`} className="link mt-4 inline-block text-xs">Nova atribuição</Link> : null}
           </Panel>
         </div>
       </div>

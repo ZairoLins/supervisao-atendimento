@@ -1,71 +1,105 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { today } from "@/lib/page";
-import { addMonths, formatMonth, monthKey, parseMonthKey, startOfMonth } from "@/lib/dates";
-import { readParams } from "@/lib/validation";
-import { employeeOptions } from "@/modules/employees/service";
-import { employeesWithoutMetric } from "@/modules/metrics/service";
-import { createMetricAction } from "@/modules/metrics/actions";
-import { ActionForm, CheckboxField, FormMessage, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
-import { EmptyState, PageHeader, Panel } from "@/components/ui/primitives";
+import { addDays, dayNumber, formatDate, formatWeekday, toDateKey } from "@/lib/dates";
+import { readParams, safeDateParam } from "@/lib/validation";
+import { dailyBatchData } from "@/modules/metrics/service";
+import { saveDailyBatchAction } from "@/modules/metrics/actions";
+import { ActionForm, FormMessage, Hidden, SubmitButton } from "@/components/ui/form";
+import { Badge, EmptyState, PageHeader, Panel } from "@/components/ui/primitives";
+import { BatchInput } from "./batch-input";
 
-export const metadata: Metadata = { title: "Lançar métricas" };
+export const metadata: Metadata = { title: "Lançar métricas do dia" };
 
-export default async function NewMetricPage(props: PageProps<"/desempenho/lancar">) {
+export default async function DailyMetricsPage(props: PageProps<"/desempenho/lancar">) {
   const actor = await requirePermission("metrics:write");
   const params = readParams(await props.searchParams);
   const t = today();
-  let month = addMonths(startOfMonth(t), -1);
-  try {
-    if (params.mes) month = parseMonthKey(params.mes);
-  } catch {
-    /* mantém o mês anterior */
-  }
-  const [employees, missing] = await Promise.all([employeeOptions(db, actor), employeesWithoutMetric(db, actor, month)]);
+  let date = safeDateParam(params.data) ?? t;
+  if (dayNumber(date) > dayNumber(t)) date = t;
+  const rows = await dailyBatchData(db, actor, date);
+  const key = toDateKey(date);
+  const filled = rows.filter((r) => r.metric).length;
+  const isToday = dayNumber(date) === dayNumber(t);
 
   return (
     <>
-      <PageHeader eyebrow="Desempenho" title="Lançar métricas do mês" description="Um lançamento por colaborador e mês. Para alterar um mês já lançado, use a correção — o valor original fica preservado." />
-      {employees.length === 0 ? (
-        <EmptyState title="Nenhum colaborador ativo" action={<Link href="/colaboradores/novo" className="btn btn-primary">Cadastrar colaborador</Link>} />
-      ) : (
-        <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[2fr_1fr]">
-          <Panel>
-            <ActionForm action={createMetricAction} resetOnSuccess className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <SelectField name="employeeId" label="Colaborador" required options={employees} defaultValue={params.colaborador} placeholder="Selecione…" />
-              <TextField name="month" label="Mês de referência" type="month" required defaultValue={monthKey(month)} max={monthKey(t)} />
-              <TextField name="ticketsHandled" label="Chamados atendidos" type="number" required min={0} step={1} inputMode="numeric" />
-              <TextField name="avgHandleMinutes" label="Tempo médio de atendimento (min)" type="number" required min={0} step="0.01" inputMode="decimal" />
-              <TextField name="avgRating" label="Avaliação média (0 a 10)" type="number" required min={0} max={10} step="0.01" inputMode="decimal" />
-              <div />
-              <TextAreaField name="notes" label="Observações sobre o período" className="md:col-span-2" rows={3} maxLength={2000} hint="Contexto que ajude a interpretar os números (ex.: férias, mudança de fila, sistema fora do ar)." />
-              <div className="md:col-span-2"><CheckboxField name="next" value="1" label="Continuar lançando após salvar" defaultChecked /></div>
-              <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-                <SubmitButton>Salvar lançamento</SubmitButton>
-                <Link href="/desempenho" className="btn btn-ghost">Cancelar</Link>
-                <FormMessage />
-              </div>
-            </ActionForm>
-          </Panel>
-          <Panel title={`Pendentes de ${formatMonth(month)}`} description="Colaboradores ativos sem lançamento neste mês.">
-            {missing.length === 0 ? (
-              <p className="text-sm text-muted">Todos os colaboradores ativos já têm lançamento.</p>
-            ) : (
-              <ul className="flex flex-col gap-2 text-sm">
-                {missing.map((m) => (
-                  <li key={m.id}><Link className="link" href={`/desempenho/lancar?colaborador=${m.id}&mes=${monthKey(month)}`}>{m.fullName}</Link></li>
-                ))}
-              </ul>
-            )}
-            <form method="get" className="mt-6 flex items-end gap-3">
-              <div><label className="label" htmlFor="l-mes">Outro mês</label><input id="l-mes" type="month" name="mes" defaultValue={monthKey(month)} className="input" /></div>
-              <button type="submit" className="btn btn-ghost btn-sm">Ver</button>
+      <PageHeader
+        eyebrow="Desempenho"
+        title="Lançar métricas do dia"
+        description="Preencha os indicadores de cada colaborador. Linhas em branco são ignoradas; ao alterar um lançamento existente, o valor anterior fica guardado no histórico."
+        actions={<Link href="/desempenho" className="btn btn-secondary">Ver desempenho</Link>}
+      />
+
+      <Panel>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Link href={`/desempenho/lancar?data=${toDateKey(addDays(date, -1))}`} className="btn btn-secondary btn-sm px-2" aria-label="Dia anterior">
+              <ChevronLeft className="size-4" aria-hidden />
+            </Link>
+            <form method="get" className="flex items-center gap-2">
+              <label htmlFor="l-data" className="sr-only">Data</label>
+              <input id="l-data" type="date" name="data" defaultValue={key} max={toDateKey(t)} className="input w-44" />
+              <button type="submit" className="btn btn-secondary btn-sm">Ir</button>
             </form>
-          </Panel>
+            {!isToday ? (
+              <Link href={`/desempenho/lancar?data=${toDateKey(addDays(date, 1))}`} className="btn btn-secondary btn-sm px-2" aria-label="Próximo dia">
+                <ChevronRight className="size-4" aria-hidden />
+              </Link>
+            ) : null}
+            {!isToday ? <Link href="/desempenho/lancar" className="btn btn-ghost btn-sm">Hoje</Link> : null}
+          </div>
+          <p className="text-sm text-muted">
+            <span className="font-medium text-ink">{formatWeekday(date)}, {formatDate(date)}</span> · {filled} de {rows.length} lançado(s)
+          </p>
         </div>
-      )}
+
+        {rows.length === 0 ? (
+          <EmptyState title="Nenhum colaborador ativo nesta data" description="Cadastre colaboradores para lançar métricas." action={<Link href="/colaboradores/novo" className="btn btn-primary">Cadastrar colaborador</Link>} />
+        ) : (
+          <ActionForm action={saveDailyBatchAction} className="flex flex-col gap-5">
+            <Hidden name="date" value={key} />
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Colaborador</th>
+                    <th className="w-32">Chamados</th>
+                    <th className="w-36">Tempo médio (min)</th>
+                    <th className="w-32">Avaliação (0–10)</th>
+                    <th>Observação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(({ employee: e, metric: m, scheduled }) => (
+                    <tr key={e.id}>
+                      <td className="min-w-48">
+                        <p className="font-medium">{e.fullName}</p>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-subtle">
+                          {e.team}
+                          {scheduled === false ? <Badge tone="neutral" icon={false}>Folga</Badge> : null}
+                          {m ? <Badge tone="ok" icon={false}>Lançado</Badge> : null}
+                        </p>
+                      </td>
+                      <td><BatchInput name={`t_${e.id}`} label={`Chamados de ${e.fullName}`} defaultValue={m?.ticketsHandled} step="1" min={0} /></td>
+                      <td><BatchInput name={`a_${e.id}`} label={`Tempo médio de ${e.fullName}`} defaultValue={m ? Number(m.avgHandleMinutes) : null} step="0.01" min={0} /></td>
+                      <td><BatchInput name={`r_${e.id}`} label={`Avaliação de ${e.fullName}`} defaultValue={m ? Number(m.avgRating) : null} step="0.01" min={0} max={10} /></td>
+                      <td className="min-w-48"><BatchInput name={`n_${e.id}`} label={`Observação de ${e.fullName}`} type="text" defaultValue={m?.notes} placeholder="Opcional" /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <SubmitButton>Salvar lançamentos do dia</SubmitButton>
+              <FormMessage />
+            </div>
+          </ActionForm>
+        )}
+      </Panel>
     </>
   );
 }

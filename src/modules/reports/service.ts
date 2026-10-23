@@ -3,11 +3,11 @@ import type { Db } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { addMonths, dayNumber, endOfMonth, formatDate, formatDuration, formatMonth, formatTimeRange, isValidDateKey, parseDateKey, startOfMonth } from "@/lib/dates";
 import { ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
-import { FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, MEETING_TYPE, REVIEW_STATUS, TASK_PRIORITY, TASK_STATUS } from "@/lib/labels";
+import { FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, MEETING_TYPE, REVIEW_STATUS } from "@/lib/labels";
 import { assertCan, can, type Actor } from "@/lib/permissions";
 import { formatCode } from "@/lib/text";
 import { teamAttendanceSummary } from "@/modules/attendance/occurrences";
-import { metricSeries, pctChange } from "@/modules/metrics/service";
+import { combine, metricSeries, pctChange } from "@/modules/metrics/service";
 import { REPORT_KINDS, REPORT_LABELS, type ReportData, type ReportKind } from "./types";
 
 const dateParam = z
@@ -55,28 +55,28 @@ async function employeeName(db: Db, id?: string) {
 const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today: Date) => Promise<ReportData>> = {
   async metricas(db, actor, p, today) {
     assertCan(actor, "metrics:read");
-    const { from, to } = defaultPeriod(p, today, 5);
-    const rows = await db.monthlyMetric.findMany({
+    const { from, to } = defaultPeriod(p, today, 0);
+    if (dayNumber(to) - dayNumber(from) > 370) throw new ValidationError("Para métricas diárias, use um período de até 12 meses.", { ate: "Período longo demais." });
+    const rows = await db.dailyMetric.findMany({
       where: {
-        month: { gte: startOfMonth(from), lte: startOfMonth(to) },
+        date: { gte: from, lte: to },
         ...(p.colaborador ? { employeeId: p.colaborador } : {}),
         ...(p.categoria ? { teamSnapshot: p.categoria } : {}),
       },
       include: { employee: { select: { fullName: true, code: true } }, _count: { select: { revisions: true } } },
-      orderBy: [{ month: "asc" }, { employee: { fullName: "asc" } }],
+      orderBy: [{ date: "asc" }, { employee: { fullName: "asc" } }],
     });
-    const tickets = rows.reduce((s, r) => s + r.ticketsHandled, 0);
-    const weighted = rows.reduce((s, r) => s + Number(r.avgHandleMinutes) * r.ticketsHandled, 0);
+    const total = combine(rows);
     const name = await employeeName(db, p.colaborador);
     return {
       title: REPORT_LABELS.metricas.title,
       meta: [periodLabel(from, to), ...(name ? [`Colaborador: ${name}`] : []), ...(p.categoria ? [`Equipe: ${p.categoria}`] : [])],
       generatedAt: new Date(),
       columns: [
-        { key: "month", header: "Mês", width: 10 },
+        { key: "date", header: "Data", width: 11 },
         { key: "code", header: "ID", width: 10 },
         { key: "name", header: "Colaborador", width: 30 },
-        { key: "team", header: "Equipe (no mês)", width: 18 },
+        { key: "team", header: "Equipe", width: 18 },
         { key: "tickets", header: "Chamados", width: 11, kind: "number" },
         { key: "aht", header: "TMA (min)", width: 11, kind: "decimal" },
         { key: "rating", header: "Avaliação", width: 11, kind: "decimal" },
@@ -84,7 +84,7 @@ const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today
         { key: "notes", header: "Observações", width: 36 },
       ],
       rows: rows.map((r) => ({
-        month: formatMonth(r.month),
+        date: formatDate(r.date),
         code: formatCode("employee", r.employee.code),
         name: r.employee.fullName,
         team: r.teamSnapshot,
@@ -94,15 +94,8 @@ const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today
         revisions: r._count.revisions,
         notes: r.notes,
       })),
-      totals: rows.length
-        ? {
-            month: "Total",
-            tickets,
-            aht: tickets ? Math.round((weighted / tickets) * 100) / 100 : null,
-            rating: Math.round((rows.reduce((s, r) => s + Number(r.avgRating), 0) / rows.length) * 100) / 100,
-          }
-        : undefined,
-      notes: ["TMA total ponderado pelo volume de chamados; avaliação total é a média simples dos lançamentos.", "Volume maior não indica, por si só, melhor desempenho."],
+      totals: rows.length ? { date: "Total", tickets: total.tickets, aht: total.aht, rating: total.rating } : undefined,
+      notes: ["Totais: chamados somados; TMA e avaliação ponderados pelo volume de chamados.", "Volume maior não indica, por si só, melhor desempenho."],
     };
   },
 
@@ -230,25 +223,14 @@ const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today
       },
       include: {
         decisions: { orderBy: { position: "asc" } },
-        tasks: { where: { deletedAt: null }, include: { assigneeEmployee: { select: { fullName: true } }, assigneeUser: { select: { name: true } } } },
         _count: { select: { participants: true, agendaItems: true } },
       },
       orderBy: { date: "asc" },
     });
     const rows = meetings.flatMap((m) => {
       const base = { code: formatCode("meeting", m.code), date: formatDate(m.date), title: m.title, type: MEETING_TYPE[m.type].label, status: MEETING_STATUS[m.status].label };
-      const items = [
-        ...m.decisions.map((d) => ({ ...base, kind: "Decisão", item: d.description, owner: null, due: null, itemStatus: null })),
-        ...m.tasks.map((t) => ({
-          ...base,
-          kind: "Ação",
-          item: `${formatCode("task", t.code)} ${t.title}`,
-          owner: t.assigneeEmployee?.fullName ?? t.assigneeUser?.name ?? null,
-          due: t.dueDate ? formatDate(t.dueDate) : null,
-          itemStatus: TASK_STATUS[t.status].label,
-        })),
-      ];
-      return items.length ? items : [{ ...base, kind: "—", item: `Sem decisões ou ações · ${m._count.agendaItems} item(ns) de pauta`, owner: null, due: null, itemStatus: null }];
+      const items = m.decisions.map((d) => ({ ...base, kind: "Decisão", item: d.description }));
+      return items.length ? items : [{ ...base, kind: "—", item: `Sem decisões registradas · ${m._count.agendaItems} item(ns) de pauta` }];
     });
     return {
       title: REPORT_LABELS.reunioes.title,
@@ -261,58 +243,9 @@ const builders: Record<ReportKind, (db: Db, actor: Actor, p: ReportParams, today
         { key: "type", header: "Tipo", width: 13 },
         { key: "status", header: "Situação", width: 11 },
         { key: "kind", header: "Registro", width: 9 },
-        { key: "item", header: "Descrição", width: 40 },
-        { key: "owner", header: "Responsável", width: 18 },
-        { key: "due", header: "Prazo", width: 11 },
-        { key: "itemStatus", header: "Status", width: 12 },
+        { key: "item", header: "Descrição", width: 60 },
       ],
       rows,
-    };
-  },
-
-  async tarefas(db, actor, p, today) {
-    assertCan(actor, "tasks:read");
-    const statusFilter = p.status && ["PENDING", "IN_PROGRESS", "DONE", "CANCELED"].includes(p.status) ? [p.status] : ["PENDING", "IN_PROGRESS"];
-    const tasks = await db.task.findMany({
-      where: {
-        deletedAt: null,
-        status: { in: statusFilter as Array<"PENDING"> },
-        ...(p.de || p.ate ? { dueDate: { ...(p.de ? { gte: p.de } : {}), ...(p.ate ? { lte: p.ate } : {}) } } : {}),
-        ...(p.colaborador ? { OR: [{ employeeId: p.colaborador }, { assigneeEmployeeId: p.colaborador }] } : {}),
-        ...(p.categoria && ["LOW", "MEDIUM", "HIGH", "URGENT"].includes(p.categoria) ? { priority: p.categoria as "LOW" } : {}),
-      },
-      include: { assigneeEmployee: { select: { fullName: true } }, assigneeUser: { select: { name: true } }, employee: { select: { fullName: true } }, meeting: { select: { title: true } } },
-      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { priority: "desc" }],
-    });
-    const overdue = tasks.filter((t) => t.dueDate && dayNumber(t.dueDate) < dayNumber(today) && (t.status === "PENDING" || t.status === "IN_PROGRESS")).length;
-    return {
-      title: REPORT_LABELS.tarefas.title,
-      meta: [
-        p.de || p.ate ? `Prazo: ${p.de ? formatDate(p.de) : "—"} a ${p.ate ? formatDate(p.ate) : "—"}` : "Todos os prazos",
-        `Status: ${statusFilter.map((s) => TASK_STATUS[s as "PENDING"].label).join(", ")}`,
-      ],
-      generatedAt: new Date(),
-      columns: [
-        { key: "code", header: "ID", width: 10 },
-        { key: "title", header: "Tarefa", width: 34 },
-        { key: "priority", header: "Prioridade", width: 11 },
-        { key: "status", header: "Status", width: 13 },
-        { key: "due", header: "Prazo", width: 11 },
-        { key: "late", header: "Atrasada", width: 9 },
-        { key: "owner", header: "Responsável", width: 20 },
-        { key: "origin", header: "Origem", width: 26 },
-      ],
-      rows: tasks.map((t) => ({
-        code: formatCode("task", t.code),
-        title: t.title,
-        priority: TASK_PRIORITY[t.priority].label,
-        status: TASK_STATUS[t.status].label,
-        due: t.dueDate ? formatDate(t.dueDate) : null,
-        late: t.dueDate && dayNumber(t.dueDate) < dayNumber(today) && (t.status === "PENDING" || t.status === "IN_PROGRESS") ? "Sim" : "Não",
-        owner: t.assigneeEmployee?.fullName ?? t.assigneeUser?.name ?? null,
-        origin: t.meeting ? `Reunião: ${t.meeting.title}` : t.employee ? `Colaborador: ${t.employee.fullName}` : t.feedbackId && can(actor, "feedbacks:read") ? "Feedback" : "Manual",
-      })),
-      totals: { code: "Total", title: `${tasks.length} tarefa(s) · ${overdue} atrasada(s)` },
     };
   },
 

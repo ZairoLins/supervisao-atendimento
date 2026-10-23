@@ -12,11 +12,13 @@ import { formatDateTime } from "@/lib/dates";
 import { pageParam, readParams } from "@/lib/validation";
 import { listOccurrenceTypes } from "@/modules/attendance/occurrences";
 import { createOccurrenceTypeAction, toggleOccurrenceTypeAction } from "@/modules/attendance/actions";
-import { ActionForm, CheckboxField, FormMessage, SubmitButton, TextField } from "@/components/ui/form";
+import { ActionForm, CheckboxField, FormMessage, SelectField, SubmitButton, TextField } from "@/components/ui/form";
 import { Badge, Notice, PageHeader, Pagination, Panel, Tabs, buildHref } from "@/components/ui/primitives";
 import { changePasswordAction, revokeSessionsAction } from "./actions";
 
 export const metadata: Metadata = { title: "Configurações" };
+
+const TIME_MODE_LABEL = { NONE: "Turno inteiro", ARRIVAL: "Hora de chegada", DEPARTURE: "Hora de saída", RANGE: "Início e fim" } as const;
 
 export default async function SettingsPage(props: PageProps<"/configuracoes">) {
   const actor = await requireActor();
@@ -44,7 +46,7 @@ async function Account({ actor }: { actor: Actor }) {
   const sessions = await listSessions(db, actor);
   const tz = env().APP_TIMEZONE;
   return (
-    <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <Panel title="Alterar senha">
         <ActionForm action={changePasswordAction} resetOnSuccess className="flex max-w-md flex-col gap-5">
           <TextField name="currentPassword" label="Senha atual" type="password" required autoComplete="current-password" />
@@ -57,7 +59,7 @@ async function Account({ actor }: { actor: Actor }) {
       <Panel title="Sessões ativas" description={`Usuário: ${actor.username}`}>
         <ul className="mb-5 flex flex-col gap-3 text-sm">
           {sessions.map((s) => (
-            <li key={s.id} className="border-b border-dashed border-cork pb-3 last:border-0">
+            <li key={s.id} className="border-b border-line pb-3 last:border-0">
               <p className="truncate text-muted">{s.userAgent ?? "Navegador desconhecido"}</p>
               <p className="text-xs text-subtle">Início {formatDateTime(s.createdAt, tz)} · último acesso {formatDateTime(s.lastSeenAt, tz)} · expira {formatDateTime(s.expiresAt, tz)}</p>
             </li>
@@ -75,7 +77,7 @@ async function Account({ actor }: { actor: Actor }) {
 async function Types({ actor }: { actor: Actor }) {
   const types = await listOccurrenceTypes(db, actor, { includeInactive: true });
   return (
-    <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[3fr_2fr]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
       <Panel title="Tipos cadastrados">
         <div className="table-wrap">
           <table className="table">
@@ -86,7 +88,7 @@ async function Types({ actor }: { actor: Actor }) {
                   <td>{t.name}{t.isSystem ? <span className="block text-xs text-subtle">Tipo do sistema</span> : null}</td>
                   <td className="flex flex-wrap gap-1">
                     {t.countsAsAbsence ? <Badge tone="neutral">Desconta horas</Badge> : <Badge tone="neutral">Não desconta</Badge>}
-                    {t.requiresTimeRange ? <Badge tone="info">Exige horário</Badge> : null}
+                    {t.timeMode !== "NONE" ? <Badge tone="info">{TIME_MODE_LABEL[t.timeMode]}</Badge> : null}
                     {t.isMedical ? <Badge tone="warn">Médico / restrito</Badge> : null}
                   </td>
                   <td>{t.active ? <Badge tone="ok">Ativo</Badge> : <Badge tone="neutral">Inativo</Badge>}</td>
@@ -107,7 +109,7 @@ async function Types({ actor }: { actor: Actor }) {
         <ActionForm action={createOccurrenceTypeAction} resetOnSuccess className="flex flex-col gap-5">
           <TextField name="name" label="Nome" required maxLength={80} />
           <CheckboxField name="countsAsAbsence" label="Desconta das horas previstas" defaultChecked />
-          <CheckboxField name="requiresTimeRange" label="Exige horário inicial e final" />
+          <SelectField name="timeMode" label="Como informar o horário" defaultValue="NONE" options={Object.entries(TIME_MODE_LABEL).map(([value, label]) => ({ value, label }))} />
           <CheckboxField name="isMedical" label="Tipo médico (conteúdo restrito, fora da pesquisa e relatórios)" />
           <SubmitButton>Criar tipo</SubmitButton>
           <FormMessage />
@@ -200,7 +202,7 @@ async function Backups() {
   const { files, error, latest, stale } = await readBackups(dir, await currentTime());
   const tz = env().APP_TIMEZONE;
   return (
-    <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <Panel title="Situação dos backups">
         {!dir ? (
           <Notice tone="warn">BACKUP_DIR não configurado. Defina a variável para acompanhar os backups por aqui (somente leitura).</Notice>
@@ -211,7 +213,7 @@ async function Backups() {
             {stale ? <div className="mb-4"><Notice tone="warn">Nenhum backup nas últimas 36 horas. Verifique o timer do systemd.</Notice></div> : <div className="mb-4"><Notice tone="ok">Último backup em {formatDateTime(latest!.mtime, tz)}.</Notice></div>}
             <ul className="flex flex-col gap-2 text-sm">
               {files.slice(0, 10).map((f) => (
-                <li key={f.name} className="flex justify-between gap-3 border-b border-dashed border-cork pb-2 last:border-0">
+                <li key={f.name} className="flex justify-between gap-3 border-b border-line pb-2 last:border-0">
                   <span className="truncate">{f.name}</span>
                   <span className="shrink-0 text-xs text-subtle">{formatDateTime(f.mtime, tz)} · {(f.size / 1024 / 1024).toFixed(1)} MB</span>
                 </li>
@@ -222,9 +224,9 @@ async function Backups() {
       </Panel>
       <Panel title="Procedimento">
         <ul className="flex flex-col gap-3 text-sm text-muted">
-          <li>Backups automáticos diários com <span className="text-cream">pg_dump</span> (formato custom), via timer do systemd — ver <span className="text-cream">deploy/backup.sh</span>.</li>
+          <li>Backups automáticos diários com <span className="text-ink">pg_dump</span> (formato custom), via timer do systemd — ver <span className="text-ink">deploy/backup.sh</span>.</li>
           <li>Retenção configurável (padrão: 14 diários). Copie os dumps para outro servidor ou mídia.</li>
-          <li>Teste de restauração: <span className="text-cream">deploy/restore-test.sh</span> restaura o último dump em um banco temporário e confere as tabelas.</li>
+          <li>Teste de restauração: <span className="text-ink">deploy/restore-test.sh</span> restaura o último dump em um banco temporário e confere as tabelas.</li>
           <li>Anexos privados ficam em ATTACHMENTS_DIR e devem entrar na mesma rotina de cópia.</li>
           <li>Detalhes em docs/IMPLANTACAO.md.</li>
         </ul>

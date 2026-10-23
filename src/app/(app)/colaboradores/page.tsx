@@ -86,7 +86,7 @@ export default async function EmployeesPage(props: PageProps<"/colaboradores">) 
             <EmptyState
               icon={<Users className="size-6" />}
               title="Nenhum colaborador cadastrado"
-              description="Cadastre a equipe para começar a registrar frequência, métricas, feedbacks e tarefas."
+              description="Cadastre a equipe para começar a registrar frequência, métricas, feedbacks e reuniões."
               action={can(actor, "employees:write") ? <Link href="/colaboradores/novo" className="btn btn-primary">Cadastrar o primeiro colaborador</Link> : null}
             />
           )

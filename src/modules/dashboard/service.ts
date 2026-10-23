@@ -1,5 +1,5 @@
 import type { Db } from "@/lib/db";
-import { addMonths, endOfMonth, monthKey, monthRange, startOfMonth } from "@/lib/dates";
+import { addDays, addMonths, endOfMonth, monthKey, monthRange, startOfMonth } from "@/lib/dates";
 import { can, type Actor } from "@/lib/permissions";
 import { aggregate, employeesWithoutMetric, metricSeries } from "@/modules/metrics/service";
 
@@ -56,30 +56,16 @@ export async function loadDashboard(db: Db, actor: Actor, f: DashboardFilters, t
     series: Awaited<ReturnType<typeof metricSeries>>;
     current: ReturnType<typeof aggregate>;
     previous: ReturnType<typeof aggregate>;
-    missingLastMonth: Array<{ id: string; fullName: string; code: number }>;
+    /** Colaboradores com turno ontem e sem lançamento de métricas */
+    missingYesterday: Array<{ id: string; fullName: string; code: number }>;
   } = null;
   if (can(actor, "metrics:read")) {
     const [series, prevSeries, missing] = await Promise.all([
       metricSeries(db, actor, { months, end: from.getTime() <= to.getTime() ? startOfMonth(to) : from, employeeId: f.employeeId }),
       metricSeries(db, actor, { months, end: startOfMonth(prevTo), employeeId: f.employeeId }),
-      employeesWithoutMetric(db, actor, addMonths(startOfMonth(today), -1)),
+      employeesWithoutMetric(db, actor, addDays(today, -1)),
     ]);
-    metrics = { series, current: aggregate(series), previous: aggregate(prevSeries), missingLastMonth: f.employeeId ? missing.filter((m) => m.id === f.employeeId) : missing };
-  }
-
-  let tasks: null | {
-    open: number;
-    overdue: number;
-    overdueList: Array<{ id: string; title: string; dueDate: Date | null; priority: string; code: number }>;
-  } = null;
-  if (can(actor, "tasks:read")) {
-    const taskWhere = { deletedAt: null, status: { in: ["PENDING" as const, "IN_PROGRESS" as const] }, ...(f.employeeId ? { OR: [{ employeeId: f.employeeId }, { assigneeEmployeeId: f.employeeId }] } : {}) };
-    const [open, overdue, overdueList] = await Promise.all([
-      db.task.count({ where: taskWhere }),
-      db.task.count({ where: { ...taskWhere, dueDate: { lt: today } } }),
-      db.task.findMany({ where: { ...taskWhere, dueDate: { lt: today } }, orderBy: { dueDate: "asc" }, take: 5, select: { id: true, title: true, dueDate: true, priority: true, code: true } }),
-    ]);
-    tasks = { open, overdue, overdueList };
+    metrics = { series, current: aggregate(series), previous: aggregate(prevSeries), missingYesterday: f.employeeId ? missing.filter((m) => m.id === f.employeeId) : missing };
   }
 
   const upcomingMeetings = can(actor, "meetings:read")
@@ -113,5 +99,5 @@ export async function loadDashboard(db: Db, actor: Actor, f: DashboardFilters, t
       })
     : null;
 
-  return { period: { from, to, months }, activeEmployees, totalEmployees, attendance, metrics, tasks, upcomingMeetings, followUps, withoutSchedule };
+  return { period: { from, to, months }, activeEmployees, totalEmployees, attendance, metrics, upcomingMeetings, followUps, withoutSchedule };
 }

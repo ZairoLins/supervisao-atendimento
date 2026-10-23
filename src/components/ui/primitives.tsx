@@ -21,9 +21,9 @@ export function PageHeader({
   return (
     <header className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-end md:justify-between">
       <div className="min-w-0">
-        {eyebrow ? <p className="eyebrow mb-3">{eyebrow}</p> : null}
+        {eyebrow ? <p className="mb-1.5 text-sm font-medium text-primary">{eyebrow}</p> : null}
         <h1 className="display break-words">{title}</h1>
-        {description ? <p className="mt-3 max-w-2xl text-sm text-muted">{description}</p> : null}
+        {description ? <div className="mt-2 max-w-2xl text-sm text-muted">{description}</div> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
@@ -46,10 +46,10 @@ export function Panel({
   return (
     <section className={cx("panel", className)}>
       {title || actions ? (
-        <div className="mb-[18px] flex flex-wrap items-start justify-between gap-3">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div>
             {title ? <h2 className="subheading">{title}</h2> : null}
-            {description ? <p className="mt-2 text-xs text-subtle">{description}</p> : null}
+            {description ? <p className="mt-1 text-[13px] text-subtle">{description}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
         </div>
@@ -105,8 +105,8 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-start gap-3 rounded-[var(--radius-card)] border border-dashed border-cork px-6 py-8">
-      {icon ? <div className="text-subtle">{icon}</div> : null}
+    <div className="flex flex-col items-center gap-3 rounded-[var(--radius-card)] border border-dashed border-line-strong bg-surface-2/50 px-6 py-10 text-center">
+      {icon ? <div className="grid size-12 place-items-center rounded-full bg-primary-soft text-primary">{icon}</div> : null}
       <p className="subheading">{title}</p>
       {description ? <p className="max-w-xl text-sm text-muted">{description}</p> : null}
       {action ? <div className="mt-1">{action}</div> : null}
@@ -129,15 +129,15 @@ export function Stat({
 }) {
   const body = (
     <>
-      <p className="eyebrow">{label}</p>
-      <p className={cx("mt-4 text-3xl font-medium leading-none tabular-nums", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>
+      <p className="text-[13px] font-medium text-muted">{label}</p>
+      <p className={cx("mt-3 text-[28px] font-semibold leading-none tracking-tight tabular-nums", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>
         {value}
       </p>
       {hint ? <p className="mt-3 text-xs text-subtle">{hint}</p> : null}
     </>
   );
   return href ? (
-    <Link href={href} className="panel-tight block transition-colors hover:border-driftwood">
+    <Link href={href} className="panel-tight block transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md">
       {body}
     </Link>
   ) : (
@@ -186,7 +186,7 @@ export function Pagination({
 }) {
   if (total === 0) return null;
   return (
-    <nav aria-label="Paginação" className="mt-[18px] flex flex-wrap items-center justify-between gap-3 text-xs text-subtle">
+    <nav aria-label="Paginação" className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs text-subtle">
       <span>
         {total} {total === 1 ? "registro" : "registros"} · página {page} de {Math.max(pageCount, 1)}
       </span>
@@ -223,7 +223,7 @@ export function SortHeader({
   const dir = active && params.dir === "asc" ? "desc" : "asc";
   return (
     <th className={className} aria-sort={active ? (params.dir === "asc" ? "ascending" : "descending") : "none"}>
-      <Link href={buildHref(base, params, { sort: field, dir, page: undefined })} className="inline-flex items-center gap-1 hover:text-cream">
+      <Link href={buildHref(base, params, { sort: field, dir, page: undefined })} className="inline-flex items-center gap-1 hover:text-ink">
         {children}
         {active ? params.dir === "asc" ? <ArrowUp className="size-3" aria-hidden /> : <ArrowDown className="size-3" aria-hidden /> : null}
       </Link>
@@ -233,11 +233,11 @@ export function SortHeader({
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "danger" | "ok"; children: ReactNode }) {
   const Icon = tone === "ok" ? CircleCheck : tone === "info" ? Info : CircleAlert;
-  const color = { info: "border-info/30 text-info", warn: "border-warn/40 text-warn", danger: "border-danger/50 text-danger", ok: "border-ok/40 text-ok" }[tone];
+  const color = { info: "border-primary/20 bg-primary-soft text-primary", warn: "border-warn/30 bg-warn-soft text-warn", danger: "border-danger/30 bg-danger-soft text-danger", ok: "border-ok/30 bg-ok-soft text-ok" }[tone];
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={cx("flex items-start gap-2 rounded-[10px] border border-dashed px-4 py-3 text-sm", color)}>
+    <div role={tone === "danger" ? "alert" : "status"} className={cx("flex items-start gap-2 rounded-lg border px-4 py-3 text-sm", color)}>
       <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-      <div className="text-cream/90">{children}</div>
+      <div className="text-ink/90">{children}</div>
     </div>
   );
 }
@@ -245,19 +245,19 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
 export function Tabs({ items, active }: { items: Array<{ key: string; label: string; href: string; count?: number }>; active: string }) {
   return (
     <nav aria-label="Seções" className="-mx-4 mb-6 overflow-x-auto px-4 md:mx-0 md:px-0">
-      <ul className="flex min-w-max gap-5 border-b border-dashed border-cork">
+      <ul className="flex min-w-max gap-1 rounded-xl border border-line bg-surface p-1">
         {items.map((t) => (
           <li key={t.key}>
             <Link
               href={t.href}
               aria-current={t.key === active ? "page" : undefined}
               className={cx(
-                "-mb-px inline-flex items-center gap-1.5 border-b py-3 text-xs font-medium uppercase",
-                t.key === active ? "border-cream text-cream" : "border-transparent text-subtle hover:text-cream",
+                "inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors",
+                t.key === active ? "bg-primary text-white shadow-sm" : "text-muted hover:bg-surface-2 hover:text-ink",
               )}
             >
               {t.label}
-              {typeof t.count === "number" ? <span className="text-[10px] text-subtle">{t.count}</span> : null}
+              {typeof t.count === "number" ? <span className="text-xs opacity-70">{t.count}</span> : null}
             </Link>
           </li>
         ))}

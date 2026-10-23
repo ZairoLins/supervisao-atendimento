@@ -25,7 +25,6 @@ export function buildSearchText(...parts: Array<string | number | null | undefin
 export const CODE_PREFIX = {
   employee: "COL",
   meeting: "REU",
-  task: "TAR",
   occurrence: "OCO",
   feedback: "FDB",
 } as const;
@@ -36,7 +35,7 @@ export function formatCode(entity: CodeEntity, code: number): string {
   return `${CODE_PREFIX[entity]}-${String(code).padStart(4, "0")}`;
 }
 
-/** Reconhece identificadores como "TAR-12", "tar 0012" ou "#12". */
+/** Reconhece identificadores como "REU-12", "reu 0012" ou "#12". */
 export function parseCodeQuery(query: string): { entity: CodeEntity | null; code: number } | null {
   const q = query.trim().toUpperCase();
   const prefixed = /^([A-Z]{3})[\s-]?0*(\d{1,9})$/.exec(q);

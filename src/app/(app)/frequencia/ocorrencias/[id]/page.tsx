@@ -41,8 +41,8 @@ export default async function OccurrencePage(props: PageProps<"/frequencia/ocorr
         }
       />
       {params.salvo ? <div className="mb-6"><Notice tone="ok">Ocorrência salva.</Notice></div> : null}
-      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[2fr_1fr]">
-        <div className="flex flex-col gap-[18px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[2fr_1fr]">
+        <div className="flex flex-col gap-5">
           <Panel title="Registro">
             <DescriptionList
               items={[
@@ -80,7 +80,7 @@ export default async function OccurrencePage(props: PageProps<"/frequencia/ocorr
           <AuditTrail actor={actor} entityType="AttendanceOccurrence" entityId={o.id} />
         </div>
 
-        <div className="flex flex-col gap-[18px]">
+        <div className="flex flex-col gap-5">
           {canWrite ? (
             <Panel title="Conferência">
               <div className="flex flex-wrap gap-2">

@@ -1,18 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, CalendarPlus, ClipboardPlus, LineChart, UserPlus, FileWarning } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarPlus, ClipboardList, FileWarning, LineChart, MessageSquareText, UserPlus, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
 import { today } from "@/lib/page";
-import { addMonths, formatDate, formatMonth, formatTime, monthKey, monthRange, parseMonthKey, startOfMonth } from "@/lib/dates";
-import { TASK_PRIORITY } from "@/lib/labels";
-import { formatCode } from "@/lib/text";
+import { addDays, addMonths, formatDate, formatMonth, formatTime, monthKey, monthRange, parseMonthKey, startOfMonth, toDateKey } from "@/lib/dates";
 import { readParams } from "@/lib/validation";
 import { loadDashboard } from "@/modules/dashboard/service";
 import { pctChange } from "@/modules/metrics/service";
 import { employeeOptions } from "@/modules/employees/service";
-import { Badge, EmptyState, PageHeader, Panel, Stat } from "@/components/ui/primitives";
+import { Badge, EmptyState, Panel, Stat } from "@/components/ui/primitives";
 import { CountBars, MetricTrend } from "@/components/charts/metric-trend";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -53,40 +51,39 @@ export default async function DashboardPage(props: PageProps<"/">) {
     can(actor, "employees:read") ? employeeOptions(db, actor, { includeInactive: true }) : Promise.resolve([]),
   ]);
   const hasMetrics = data.metrics ? data.metrics.series.some((s) => s.tickets !== null) : false;
-  const periodLabel = `${formatMonth(fromMonth)} — ${formatMonth(toMonth)}`;
+  const periodLabel = `${formatMonth(fromMonth)} – ${formatMonth(toMonth)}`;
+  const yesterday = addDays(t, -1);
   const attention =
-    (data.attendance?.pendingReview ?? 0) +
-    (data.tasks?.overdue ?? 0) +
-    (data.followUps?.length ?? 0) +
-    (data.withoutSchedule?.length ?? 0) +
-    (data.metrics?.missingLastMonth.length ?? 0);
+    (data.attendance?.pendingReview ?? 0) + (data.followUps?.length ?? 0) + (data.withoutSchedule?.length ?? 0) + (data.metrics?.missingYesterday.length ?? 0);
 
   const shortcuts = [
-    can(actor, "employees:write") && { href: "/colaboradores/novo", label: "Cadastrar colaborador", icon: UserPlus },
+    can(actor, "metrics:write") && { href: "/desempenho/lancar", label: "Lançar métricas do dia", icon: LineChart },
     can(actor, "attendance:write") && { href: "/frequencia/ocorrencias/nova", label: "Registrar ocorrência", icon: FileWarning },
-    can(actor, "metrics:write") && { href: "/desempenho/lancar", label: "Lançar métricas", icon: LineChart },
-    can(actor, "meetings:write") && { href: "/reunioes/nova", label: "Criar reunião", icon: CalendarPlus },
-    can(actor, "tasks:write") && { href: "/tarefas/nova", label: "Adicionar tarefa", icon: ClipboardPlus },
+    can(actor, "employees:write") && { href: "/colaboradores/novo", label: "Novo colaborador", icon: UserPlus },
+    can(actor, "meetings:write") && { href: "/reunioes/nova", label: "Nova reunião", icon: CalendarPlus },
   ].filter(Boolean) as Array<{ href: string; label: string; icon: typeof UserPlus }>;
 
   return (
     <>
-      <PageHeader eyebrow={`Hoje, ${formatDate(t)}`} title={`Olá, ${actor.name.split(" ")[0]}`} description="Visão geral da equipe com dados registrados no sistema." />
-
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <form method="get" className="flex flex-wrap items-end gap-4">
+      <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-primary">{formatDate(t)}</p>
+          <h1 className="display">Olá, {actor.name.split(" ")[0]}</h1>
+          <p className="mt-2 text-sm text-muted">Resumo da equipe com base nos registros do sistema.</p>
+        </div>
+        <form method="get" className="flex flex-wrap items-end gap-3">
           <div>
-            <label htmlFor="d-de" className="label">De (mês)</label>
+            <label htmlFor="d-de" className="label">De</label>
             <input id="d-de" type="month" name="de" defaultValue={monthKey(fromMonth)} className="input w-40" />
           </div>
           <div>
-            <label htmlFor="d-ate" className="label">Até (mês)</label>
+            <label htmlFor="d-ate" className="label">Até</label>
             <input id="d-ate" type="month" name="ate" defaultValue={monthKey(toMonth)} className="input w-40" />
           </div>
           {employees.length ? (
             <div>
               <label htmlFor="d-col" className="label">Colaborador</label>
-              <select id="d-col" name="colaborador" defaultValue={employeeId ?? ""} className="input w-56">
+              <select id="d-col" name="colaborador" defaultValue={employeeId ?? ""} className="input w-52">
                 <option value="">Toda a equipe</option>
                 {employees.map((e) => (
                   <option key={e.value} value={e.value}>{e.label}</option>
@@ -96,122 +93,107 @@ export default async function DashboardPage(props: PageProps<"/">) {
           ) : null}
           <button type="submit" className="btn btn-secondary">Aplicar</button>
         </form>
-        {shortcuts.length ? (
-          <nav aria-label="Atalhos" className="flex flex-wrap gap-2">
-            {shortcuts.map((s) => (
-              <Link key={s.href} href={s.href} className="btn btn-ghost btn-sm border-cork">
-                <s.icon className="size-3.5" aria-hidden /> {s.label}
-              </Link>
-            ))}
-          </nav>
-        ) : null}
-      </div>
+      </header>
 
-      <section aria-label="Indicadores" className="mb-[18px] grid grid-cols-2 gap-[18px] lg:grid-cols-3 2xl:grid-cols-6">
+      {shortcuts.length ? (
+        <nav aria-label="Atalhos" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {shortcuts.map((s) => (
+            <Link key={s.href} href={s.href} className="group flex items-center gap-3 rounded-xl border border-line bg-surface p-4 shadow-sm transition hover:border-primary/40 hover:shadow-md">
+              <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary transition group-hover:bg-primary group-hover:text-white">
+                <s.icon className="size-5" aria-hidden />
+              </span>
+              <span className="text-sm font-medium">{s.label}</span>
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+
+      <section aria-label="Indicadores" className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
         {data.activeEmployees !== null ? (
-          <Stat label="Colaboradores ativos" value={data.activeEmployees} hint={`${data.totalEmployees} cadastrados no total`} href="/colaboradores" />
+          <Stat label="Colaboradores ativos" value={data.activeEmployees} hint={`${data.totalEmployees} cadastrados`} href="/colaboradores" />
         ) : null}
         {data.attendance ? (
-          <Stat
-            label="Ocorrências de frequência"
-            value={data.attendance.occurrences}
-            hint={<>{periodLabel} · <Delta current={data.attendance.occurrences} previous={data.attendance.previous} /></>}
-            href="/frequencia"
-          />
+          <Stat label="Ocorrências" value={data.attendance.occurrences} hint={<Delta current={data.attendance.occurrences} previous={data.attendance.previous} />} href="/frequencia" />
         ) : null}
         {data.metrics ? (
           <>
             <Stat
-              label="Chamados registrados"
+              label="Chamados atendidos"
               value={data.metrics.current.tickets?.toLocaleString("pt-BR") ?? "—"}
-              hint={data.metrics.current.tickets === null ? "Sem métricas no período" : <Delta current={data.metrics.current.tickets} previous={data.metrics.previous.tickets} />}
+              hint={data.metrics.current.tickets === null ? "Sem lançamentos no período" : <Delta current={data.metrics.current.tickets} previous={data.metrics.previous.tickets} />}
               href="/desempenho"
             />
             <Stat
               label="Avaliação média"
               value={data.metrics.current.rating?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }) ?? "—"}
-              hint={data.metrics.current.rating === null ? "Sem métricas no período" : "Média simples dos lançamentos (0–10)"}
+              hint={data.metrics.current.rating === null ? "Sem lançamentos no período" : "Escala de 0 a 10"}
               href="/desempenho"
             />
             <Stat
               label="Tempo médio de atendimento"
               value={data.metrics.current.aht === null ? "—" : `${data.metrics.current.aht.toLocaleString("pt-BR")} min`}
-              hint={data.metrics.current.aht === null ? "Sem métricas no período" : "Ponderado pelo volume de chamados"}
+              hint={data.metrics.current.aht === null ? "Sem lançamentos no período" : "Ponderado pelos chamados"}
               href="/desempenho"
             />
           </>
         ) : null}
-        {data.tasks ? (
-          <Stat
-            label="Tarefas pendentes"
-            value={data.tasks.open}
-            tone={data.tasks.overdue ? "warn" : undefined}
-            hint={data.tasks.overdue ? `${data.tasks.overdue} atrasada(s)` : "Nenhuma atrasada"}
-            href="/tarefas?status=OPEN"
-          />
-        ) : null}
       </section>
 
-      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[2fr_1fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[2fr_1fr]">
         {data.metrics ? (
-          <Panel title="Evolução mensal dos indicadores" description={`${periodLabel}${employeeId ? " · colaborador selecionado" : " · equipe"}`}>
+          <Panel title="Evolução mensal" description={`${periodLabel} · ${employeeId ? "colaborador selecionado" : "toda a equipe"}`}>
             {hasMetrics ? (
               <MetricTrend data={data.metrics.series} primaryLabel={employeeId ? "Colaborador" : "Equipe"} />
             ) : (
               <EmptyState
+                icon={<LineChart className="size-5" />}
                 title="Nenhuma métrica no período"
-                description="Os gráficos usam apenas lançamentos reais. Lance os indicadores mensais para acompanhar a evolução."
+                description="Os gráficos usam apenas lançamentos reais. Lance as métricas do dia para acompanhar a evolução."
                 action={can(actor, "metrics:write") ? <Link href="/desempenho/lancar" className="btn btn-primary">Lançar métricas</Link> : null}
               />
             )}
           </Panel>
         ) : null}
 
-        <Panel title="Precisa de atenção" description={attention ? `${attention} item(ns)` : undefined}>
+        <Panel title="Precisa de atenção" actions={attention ? <Badge tone="warn">{attention}</Badge> : undefined}>
           {attention === 0 ? (
-            <p className="text-sm text-muted">Nada pendente no momento.</p>
+            <div className="flex items-center gap-3 rounded-lg bg-ok-soft p-4 text-sm text-ok">
+              <ClipboardList className="size-5" aria-hidden /> Nada pendente no momento.
+            </div>
           ) : (
-            <ul className="flex flex-col gap-4 text-sm">
-              {data.attendance && data.attendance.pendingReview > 0 ? (
-                <li className="flex items-start gap-3">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
-                  <Link href="/frequencia?conferencia=PENDING" className="link">{data.attendance.pendingReview} ocorrência(s) aguardando conferência</Link>
-                </li>
-              ) : null}
-              {data.tasks?.overdueList.map((task) => (
-                <li key={task.id} className="flex items-start gap-3">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
-                  <span>
-                    <Link href={`/tarefas/${task.id}`} className="link">{task.title}</Link>
-                    <span className="block text-xs text-subtle">{formatCode("task", task.code)} · venceu em {formatDate(task.dueDate)} · {TASK_PRIORITY[task.priority as keyof typeof TASK_PRIORITY].label}</span>
+            <ul className="flex flex-col divide-y divide-line">
+              {data.metrics?.missingYesterday.length ? (
+                <li className="flex items-start gap-3 py-3 first:pt-0">
+                  <LineChart className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+                  <span className="text-sm">
+                    <Link href={`/desempenho/lancar?data=${toDateKey(yesterday)}`} className="link">
+                      {data.metrics.missingYesterday.length} colaborador(es) com turno ontem sem métricas
+                    </Link>
+                    <span className="block text-xs text-subtle">{data.metrics.missingYesterday.slice(0, 3).map((e) => e.fullName).join(", ")}{data.metrics.missingYesterday.length > 3 ? "…" : ""}</span>
                   </span>
                 </li>
-              ))}
-              {data.followUps?.map((f) => (
-                <li key={f.id} className="flex items-start gap-3">
+              ) : null}
+              {data.attendance && data.attendance.pendingReview > 0 ? (
+                <li className="flex items-start gap-3 py-3 first:pt-0">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
-                  <span>
+                  <Link href="/frequencia?conferencia=PENDING" className="link text-sm">{data.attendance.pendingReview} ocorrência(s) aguardando conferência</Link>
+                </li>
+              ) : null}
+              {data.followUps?.map((f) => (
+                <li key={f.id} className="flex items-start gap-3 py-3 first:pt-0">
+                  <MessageSquareText className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
+                  <span className="text-sm">
                     <Link href={`/feedbacks/${f.id}`} className="link">Acompanhamento de feedback — {f.employee.fullName}</Link>
                     <span className="block text-xs text-subtle">Previsto para {formatDate(f.followUpDate)}</span>
                   </span>
                 </li>
               ))}
               {data.withoutSchedule?.length ? (
-                <li className="flex items-start gap-3">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
-                  <span>
-                    <Link href="/frequencia/jornadas" className="link">{data.withoutSchedule.length} colaborador(es) ativo(s) sem jornada vigente</Link>
+                <li className="flex items-start gap-3 py-3 first:pt-0">
+                  <CalendarClock className="mt-0.5 size-4 shrink-0 text-warn" aria-hidden />
+                  <span className="text-sm">
+                    <Link href="/frequencia/jornadas" className="link">{data.withoutSchedule.length} colaborador(es) sem jornada vigente</Link>
                     <span className="block text-xs text-subtle">{data.withoutSchedule.slice(0, 3).map((e) => e.fullName).join(", ")}{data.withoutSchedule.length > 3 ? "…" : ""}</span>
-                  </span>
-                </li>
-              ) : null}
-              {data.metrics?.missingLastMonth.length ? (
-                <li className="flex items-start gap-3">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
-                  <span>
-                    <Link href={`/desempenho/lancar?mes=${monthKey(addMonths(startOfMonth(t), -1))}`} className="link">
-                      {data.metrics.missingLastMonth.length} colaborador(es) sem métricas de {formatMonth(addMonths(startOfMonth(t), -1))}
-                    </Link>
                   </span>
                 </li>
               ) : null}
@@ -220,11 +202,11 @@ export default async function DashboardPage(props: PageProps<"/">) {
         </Panel>
 
         {data.attendance ? (
-          <Panel title="Ocorrências por mês" description="Ocorrências que descontam horas, exceto desconsideradas.">
+          <Panel title="Ocorrências por mês" description="Faltas, atestados, atrasos e ausências (exceto desconsideradas).">
             {data.attendance.occurrences === 0 ? (
               <EmptyState
+                icon={<FileWarning className="size-5" />}
                 title="Sem ocorrências no período"
-                description="Nenhuma falta, atestado, atraso ou ausência registrada."
                 action={can(actor, "attendance:write") ? <Link href="/frequencia/ocorrencias/nova" className="btn btn-secondary btn-sm">Registrar ocorrência</Link> : null}
               />
             ) : (
@@ -241,20 +223,27 @@ export default async function DashboardPage(props: PageProps<"/">) {
         ) : null}
 
         {data.upcomingMeetings ? (
-          <Panel title="Próximas reuniões" actions={<Link href="/reunioes" className="btn btn-ghost btn-sm">Todas</Link>}>
+          <Panel title="Próximas reuniões" actions={<Link href="/reunioes" className="btn btn-ghost btn-sm">Ver todas</Link>}>
             {data.upcomingMeetings.length === 0 ? (
               <EmptyState
+                icon={<Users className="size-5" />}
                 title="Nenhuma reunião agendada"
-                action={can(actor, "meetings:write") ? <Link href="/reunioes/nova" className="btn btn-secondary btn-sm">Criar reunião</Link> : null}
+                action={can(actor, "meetings:write") ? <Link href="/reunioes/nova" className="btn btn-secondary btn-sm">Nova reunião</Link> : null}
               />
             ) : (
-              <ul className="flex flex-col">
+              <ul className="flex flex-col gap-2">
                 {data.upcomingMeetings.map((m) => (
-                  <li key={m.id} className="border-b border-dashed border-cork py-3 first:pt-0 last:border-0">
-                    <Link href={`/reunioes/${m.id}`} className="link">{m.title}</Link>
-                    <p className="mt-1 text-xs text-subtle">
-                      {formatDate(m.date)} · {formatTime(m.startMinute)} · {m._count.agendaItems} item(ns) de pauta
-                    </p>
+                  <li key={m.id}>
+                    <Link href={`/reunioes/${m.id}`} className="flex items-center gap-3 rounded-lg p-2 transition hover:bg-surface-2">
+                      <span className="grid w-12 shrink-0 place-items-center rounded-lg bg-primary-soft py-1.5 text-primary">
+                        <span className="text-lg font-semibold leading-none">{String(m.date.getUTCDate()).padStart(2, "0")}</span>
+                        <span className="text-[10px] font-medium">{formatMonth(m.date).split("/")[0]}</span>
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{m.title}</span>
+                        <span className="block text-xs text-subtle">{formatTime(m.startMinute)} · {m._count.agendaItems} item(ns) de pauta</span>
+                      </span>
+                    </Link>
                   </li>
                 ))}
               </ul>

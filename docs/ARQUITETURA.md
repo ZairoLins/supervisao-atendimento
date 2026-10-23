@@ -20,7 +20,7 @@ src/
     (app)/                 área autenticada (layout com menu + pesquisa global)
       page.tsx             dashboard
       colaboradores/ reunioes/ frequencia/ desempenho/
-      feedbacks/ tarefas/ relatorios/ configuracoes/ pesquisa/
+      feedbacks/ relatorios/ configuracoes/ pesquisa/
     api/pesquisa           endpoint JSON da pesquisa global
     api/relatorios         exportação Excel/PDF gerada no servidor
     api/anexos/[id]        download autenticado de anexos privados
@@ -67,7 +67,7 @@ A autorização é verificada no servidor em três pontos: página (`requirePerm
 - **Cabeçalhos:** `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, sem `X-Powered-By`.
 - **Tempo:** horários em minutos desde 00:00 da data do turno (fim > 1440 = dia seguinte). Elimina ambiguidade de fuso e torna o cálculo determinístico. "Hoje" é calculado no fuso `APP_TIMEZONE`.
 - **Fonte auto-hospedada:** o servidor interno pode não ter internet no build.
-- **Exclusão lógica** (`deletedAt`) para ocorrências, reuniões, feedbacks, anotações e tarefas; colaboradores são inativados, nunca excluídos.
+- **Exclusão lógica** (`deletedAt`) para ocorrências, reuniões, feedbacks e anotações; colaboradores são inativados, nunca excluídos.
 
 ## Pesquisa global
 
@@ -85,4 +85,4 @@ Gerados no servidor (`/api/relatorios`), com parâmetros validados por Zod, perm
 
 ## Design system
 
-Tokens em `src/app/globals.css` (`@theme` do Tailwind 4): `walnut`, `cream`, `bark`, `cork`, `driftwood`, `ember`, mais derivados de leitura (`muted`, `subtle`) com contraste AA sobre o fundo e cores de estado sempre acompanhadas de texto/ícone. Títulos, navegação e rótulos em caixa alta peso 500; dados, nomes e textos longos em caixa normal. Cartões com raio 12px e padding 24px, espaçamento de 18px, divisórias tracejadas, campos com linha inferior, botão primário pill Bark Brown e secundário com contorno; sem sombras.
+Tokens em `src/app/globals.css` (`@theme` do Tailwind 4): fundo `canvas` (#f5f7fb), superfícies `surface` (branco), texto `ink` (quase preto), bordas `line`, ação `primary` (azul #2563eb) e navegação `sidebar` (preto). Estados (`ok`, `warn`, `danger`) têm versão suave para fundos e sempre acompanham texto/ícone. Tipografia Inter (auto-hospedada), títulos em peso 600, cartões com raio 14px e sombra leve, botões e campos com raio 8px e foco azul.

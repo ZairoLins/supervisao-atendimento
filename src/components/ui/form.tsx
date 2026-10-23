@@ -246,10 +246,12 @@ export function SelectField({
   defaultValue,
   options,
   placeholder,
+  onChange,
 }: BaseFieldProps & {
   defaultValue?: string | null;
   options: Array<{ value: string; label: string; group?: string }>;
   placeholder?: string;
+  onChange?: (value: string) => void;
 }) {
   const f = useField(name, defaultValue);
   const groups = new Map<string, Array<{ value: string; label: string }>>();
@@ -266,6 +268,7 @@ export function SelectField({
         defaultValue={f.value}
         required={required}
         disabled={disabled}
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}
         aria-invalid={f.error ? true : undefined}
         aria-describedby={f.error ? `${f.id}-err` : hint ? `${f.id}-hint` : undefined}
         className="input"

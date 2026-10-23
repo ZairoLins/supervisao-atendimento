@@ -1,9 +1,9 @@
 import type { Db } from "@/lib/db";
-import { formatDate, formatMonth, formatTimeRange, monthKey } from "@/lib/dates";
-import { EMPLOYEE_STATUS, FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, NOTE_CATEGORY, TASK_PRIORITY, TASK_STATUS } from "@/lib/labels";
+import { endOfMonth, formatDate, formatTimeRange } from "@/lib/dates";
+import { EMPLOYEE_STATUS, FEEDBACK_STATUS, FEEDBACK_TYPE, MEETING_STATUS, NOTE_CATEGORY } from "@/lib/labels";
 import { can, type Actor, type Permission } from "@/lib/permissions";
 import { formatCode, normalizeQuery, normalizeText, parseCodeQuery, truncate, type CodeEntity } from "@/lib/text";
-import { parseMonthQuery, scoreMatch } from "./ranking";
+import { parseDayQuery, parseMonthQuery, scoreMatch } from "./ranking";
 import { SEARCH_TYPE_LABEL, SEARCH_TYPES, type SearchGroup, type SearchResponse, type SearchResult, type SearchType } from "./types";
 
 export type SearchOptions = {
@@ -132,48 +132,30 @@ const PROVIDERS: Provider[] = [
     },
   },
   {
-    type: "task",
-    permission: "tasks:read",
-    async run(db, _actor, ctx) {
-      const code = codeFor(ctx, "task");
-      const rows = await db.task.findMany({
-        where: { deletedAt: null, OR: [{ searchText: { contains: ctx.q } }, ...(code !== null ? [{ code }] : [])], ...(dateRange(ctx) ? { dueDate: dateRange(ctx) } : {}) },
-        take: ctx.take,
-        orderBy: { updatedAt: "desc" },
-      });
-      return rows.map((t) => ({
-        type: "task",
-        id: t.id,
-        title: t.title,
-        summary: `${formatCode("task", t.code)} · ${TASK_STATUS[t.status].label} · prioridade ${TASK_PRIORITY[t.priority].label.toLowerCase()}`,
-        date: t.dueDate ? formatDate(t.dueDate) : null,
-        url: `/tarefas/${t.id}`,
-        score: scoreMatch(t.title, ctx.raw, { codeMatch: code === t.code }),
-      }));
-    },
-  },
-  {
     type: "metric",
     permission: "metrics:read",
     async run(db, _actor, ctx) {
-      const month = parseMonthQuery(ctx.raw);
-      const rows = await db.monthlyMetric.findMany({
+      // Termo pode ser um dia (23/10/2026), um mês (10/2026) ou o nome do colaborador
+      const day = parseDayQuery(ctx.raw);
+      const month = day ? null : parseMonthQuery(ctx.raw);
+      const byDate = day ? { equals: day } : month ? { gte: month, lte: endOfMonth(month) } : undefined;
+      const rows = await db.dailyMetric.findMany({
         where: {
-          ...(month ? { month } : { employee: { searchText: { contains: ctx.q } } }),
-          ...(dateRange(ctx) ? { month: { ...dateRange(ctx), ...(month ? { equals: month } : {}) } } : {}),
+          ...(byDate ? {} : { employee: { searchText: { contains: ctx.q } } }),
+          ...(byDate || dateRange(ctx) ? { date: { ...dateRange(ctx), ...byDate } } : {}),
         },
         include: { employee: { select: { fullName: true, code: true } } },
         take: ctx.take,
-        orderBy: { month: "desc" },
+        orderBy: { date: "desc" },
       });
       return rows.map((m) => ({
         type: "metric",
         id: m.id,
-        title: `${m.employee.fullName} — ${formatMonth(m.month)}`,
+        title: `${m.employee.fullName} — ${formatDate(m.date)}`,
         summary: `${m.ticketsHandled} chamados · TMA ${Number(m.avgHandleMinutes).toLocaleString("pt-BR")} min · avaliação ${Number(m.avgRating).toLocaleString("pt-BR")}`,
-        date: monthKey(m.month).split("-").reverse().join("/"),
+        date: formatDate(m.date),
         url: `/desempenho/${m.id}`,
-        score: month ? 300 : related(m.employee.fullName, ctx, m.month),
+        score: byDate ? 300 : related(m.employee.fullName, ctx, m.date),
       }));
     },
   },

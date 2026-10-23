@@ -351,11 +351,11 @@ export const DEFAULT_SCHEDULES: Array<Omit<ScheduleRule, "id"> & { description: 
 ];
 
 export const DEFAULT_OCCURRENCE_TYPES = [
-  { code: "FALTA", name: "Falta", countsAsAbsence: true, requiresTimeRange: false, isMedical: false },
-  { code: "ATESTADO", name: "Atestado", countsAsAbsence: true, requiresTimeRange: false, isMedical: true },
-  { code: "ATRASO", name: "Atraso", countsAsAbsence: true, requiresTimeRange: true, isMedical: false },
-  { code: "SAIDA_ANTECIPADA", name: "Saída antecipada", countsAsAbsence: true, requiresTimeRange: true, isMedical: false },
-  { code: "AUSENCIA_PARCIAL", name: "Ausência parcial", countsAsAbsence: true, requiresTimeRange: true, isMedical: false },
-  { code: "TROCA_PLANTAO", name: "Troca de plantão", countsAsAbsence: false, requiresTimeRange: false, isMedical: false },
-  { code: "AJUSTE_ESCALA", name: "Ajuste de escala", countsAsAbsence: false, requiresTimeRange: false, isMedical: false },
+  { code: "FALTA", name: "Falta", countsAsAbsence: true, timeMode: "NONE", isMedical: false },
+  { code: "ATESTADO", name: "Atestado", countsAsAbsence: true, timeMode: "NONE", isMedical: true },
+  { code: "ATRASO", name: "Atraso", countsAsAbsence: true, timeMode: "ARRIVAL", isMedical: false },
+  { code: "SAIDA_ANTECIPADA", name: "Saída antecipada", countsAsAbsence: true, timeMode: "DEPARTURE", isMedical: false },
+  { code: "AUSENCIA_PARCIAL", name: "Ausência parcial", countsAsAbsence: true, timeMode: "RANGE", isMedical: false },
+  { code: "TROCA_PLANTAO", name: "Troca de plantão", countsAsAbsence: false, timeMode: "NONE", isMedical: false },
+  { code: "AJUSTE_ESCALA", name: "Ajuste de escala", countsAsAbsence: false, timeMode: "NONE", isMedical: false },
 ] as const;

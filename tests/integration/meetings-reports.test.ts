@@ -4,6 +4,7 @@ import { parseDateKey } from "@/lib/dates";
 import { AppError } from "@/lib/errors";
 import {
   addAgendaItem,
+  addDecision,
   createMeeting,
   createSeries,
   deleteMeeting,
@@ -12,7 +13,6 @@ import {
   moveAgendaItem,
   removeAgendaItem,
 } from "@/modules/meetings/service";
-import { createTask, getTask, listTasks, setTaskStatus, updateTask } from "@/modules/tasks/service";
 import { createMetric } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback } from "@/modules/feedbacks/service";
@@ -23,11 +23,11 @@ import { makeEmployee, occurrenceType } from "../support/factories";
 
 const TODAY = parseDateKey("2026-10-22");
 
-describe.skipIf(!hasTestDb)("reuniões e tarefas", () => {
+describe.skipIf(!hasTestDb)("reuniões", () => {
   beforeEach(resetDb);
   afterAll(disconnect);
 
-  it("pauta ordenável e separada de anotações e ações", async () => {
+  it("pauta ordenável e separada de anotações e decisões", async () => {
     const sup = await createUser();
     const m = await createMeeting(testDb(), sup, { title: "Semanal", type: "WEEKLY", date: "2026-10-26", startTime: "09:00", agenda: "A\nB\nC" });
     const full = await getMeeting(testDb(), sup, m.id);
@@ -49,53 +49,17 @@ describe.skipIf(!hasTestDb)("reuniões e tarefas", () => {
     expect((await getMeeting(testDb(), sup, m2.id)).agendaItems.map((i) => i.title)).toEqual(["Item 1", "Item 2"]);
   });
 
-  it("vincula tarefas à reunião e ao colaborador; exclusão da reunião preserva a tarefa", async () => {
+  it("registra decisões e participantes; exclusão é lógica", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
     const m = await createMeeting(testDb(), sup, { title: "Alinhamento", type: "EXTRAORDINARY", date: "2026-10-20", startTime: "14:00", participantIds: [e.id] });
-    const t = await createTask(testDb(), sup, { title: "Revisar escala", meetingId: m.id, assignee: `employee:${e.id}`, dueDate: "2026-10-21", employeeId: e.id });
+    await addDecision(testDb(), sup, m.id, { description: "Revisar escala de dezembro" });
     const meeting = await getMeeting(testDb(), sup, m.id);
-    expect(meeting.tasks.map((x) => x.id)).toEqual([t.id]);
+    expect(meeting.decisions.map((d) => d.description)).toEqual(["Revisar escala de dezembro"]);
     expect(meeting.participants[0].employeeId).toBe(e.id);
-    const overdue = await listTasks(testDb(), sup, { due: "overdue" }, TODAY);
-    expect(overdue.items.map((x) => x.id)).toEqual([t.id]);
-    const byEmployee = await listTasks(testDb(), sup, { employeeId: e.id }, TODAY);
-    expect(byEmployee.total).toBe(1);
     await deleteMeeting(testDb(), sup, m.id);
-    const task = await getTask(testDb(), sup, t.id);
-    expect(task.meetingId).toBe(m.id);
-    expect(task.meeting?.deletedAt).not.toBeNull();
-  });
-
-  it("rejeita vínculos inexistentes", async () => {
-    const sup = await createUser();
-    await expect(createTask(testDb(), sup, { title: "X", meetingId: "0199f6b0-0000-7000-8000-000000000000" })).rejects.toThrow(AppError);
-  });
-
-  it("registra histórico de alterações da tarefa", async () => {
-    const sup = await createUser();
-    const t = await createTask(testDb(), sup, { title: "Original", priority: "LOW" });
-    await updateTask(testDb(), sup, t.id, { title: "Renomeada", priority: "URGENT", status: "IN_PROGRESS", dueDate: "2026-11-01" });
-    await setTaskStatus(testDb(), sup, t.id, "DONE");
-    const full = await getTask(testDb(), sup, t.id);
-    const fields = full.events.map((e) => e.field);
-    expect(fields).toEqual(expect.arrayContaining(["created", "Título", "Prioridade", "Status", "Prazo"]));
-    expect(full.completedAt).not.toBeNull();
-    const statusEvents = full.events.filter((e) => e.field === "Status").map((e) => e.toValue);
-    expect(statusEvents).toEqual(expect.arrayContaining(["Em andamento", "Concluída"]));
-  });
-
-  it("não revela vínculo com feedback para quem não tem acesso", async () => {
-    const sup = await createUser();
-    const asst = await createUser("ASSISTANT");
-    const e = await makeEmployee(sup);
-    const f = await createFeedback(testDb(), sup, { employeeId: e.id, date: "2026-10-01", type: "DEVELOPMENT", context: "Plano" });
-    const t = await createTask(testDb(), sup, { title: "Acompanhar plano", feedbackId: f.id });
-    const seen = await getTask(testDb(), asst, t.id);
-    expect(seen.feedbackId).toBeNull();
-    expect(seen.feedback).toBeNull();
-    // Assistente não consegue criar vínculo com feedback
-    await expect(createTask(testDb(), asst, { title: "Y", feedbackId: f.id })).rejects.toThrow(/permissão/);
+    expect((await testDb().meeting.findUniqueOrThrow({ where: { id: m.id } })).deletedAt).not.toBeNull();
+    await expect(getMeeting(testDb(), sup, m.id)).rejects.toThrow(AppError);
   });
 
   it("série semanal gera instâncias de forma idempotente", async () => {
@@ -137,9 +101,9 @@ describe.skipIf(!hasTestDb)("relatórios", () => {
   it("gera Excel válido com dados reais, filtros, totais e células protegidas", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup, { fullName: "=cmd|' /C calc'!A0" });
-    await createMetric(testDb(), sup, { employeeId: e.id, month: "2026-09", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9", notes: "+SUM(1,2)" });
+    await createMetric(testDb(), sup, { employeeId: e.id, date: "2026-09-10", ticketsHandled: "100", avgHandleMinutes: "5", avgRating: "9", notes: "+SUM(1,2)" }, TODAY);
     const other = await makeEmployee(sup);
-    await createMetric(testDb(), sup, { employeeId: other.id, month: "2026-09", ticketsHandled: "300", avgHandleMinutes: "7", avgRating: "7" });
+    await createMetric(testDb(), sup, { employeeId: other.id, date: "2026-09-11", ticketsHandled: "300", avgHandleMinutes: "7", avgRating: "7" }, TODAY);
     const report = await buildReport(testDb(), sup, params({ tipo: "metricas", de: "2026-09-01", ate: "2026-09-30" }), TODAY);
     expect(report.rows).toHaveLength(2);
     expect(report.totals?.tickets).toBe(400);
@@ -162,7 +126,7 @@ describe.skipIf(!hasTestDb)("relatórios", () => {
 
   it("gera PDF válido, inclusive sem registros", async () => {
     const sup = await createUser();
-    const report = await buildReport(testDb(), sup, params({ tipo: "tarefas", formato: "pdf" }), TODAY);
+    const report = await buildReport(testDb(), sup, params({ tipo: "reunioes", formato: "pdf" }), TODAY);
     const pdf = await renderPdf(report, "America/Sao_Paulo");
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(pdf.length).toBeGreaterThan(800);

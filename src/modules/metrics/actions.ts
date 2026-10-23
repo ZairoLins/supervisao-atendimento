@@ -2,13 +2,13 @@
 
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
-import { correctMetric, createMetric } from "./service";
+import { correctMetric, saveDailyBatch } from "./service";
 
-export async function createMetricAction(_: ActionState, fd: FormData) {
+export async function saveDailyBatchAction(_: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
-    const m = await createMetric(db, actor, formToObject(fd));
-    if (fd.get("next") === "1") return { message: "Lançamento salvo. Preencha o próximo.", revalidate: ["/desempenho", "/"] };
-    return { redirectTo: `/desempenho/${m.id}?salvo=1`, revalidate: ["/desempenho", "/"] };
+    const r = await saveDailyBatch(db, actor, formToObject(fd));
+    const parts = [r.created && `${r.created} novo(s)`, r.updated && `${r.updated} ajustado(s)`, r.unchanged && `${r.unchanged} sem alteração`].filter(Boolean);
+    return { message: `Lançamentos salvos: ${parts.join(", ")}.`, revalidate: ["/desempenho", "/"] };
   });
 }
 

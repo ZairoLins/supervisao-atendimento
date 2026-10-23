@@ -39,8 +39,6 @@ model User {
 
   sessions      Session[]
   auditLogs     AuditLog[]
-  assignedTasks Task[]       @relation("TaskAssigneeUser")
-  taskEvents    TaskEvent[]
   attachments   Attachment[]
 }
 
@@ -119,11 +117,9 @@ model Employee {
   shiftAdjustments     ShiftAdjustment[]             @relation("AdjustmentEmployee")
   swapCounterparts     ShiftAdjustment[]             @relation("AdjustmentSwapWith")
   occurrences          AttendanceOccurrence[]
-  metrics              MonthlyMetric[]
+  metrics              DailyMetric[]
   feedbacks            Feedback[]
   notes                EmployeeNote[]
-  relatedTasks         Task[]                        @relation("TaskRelatedEmployee")
-  assignedTasks        Task[]                        @relation("TaskAssigneeEmployee")
   meetingParticipation MeetingParticipant[]
 
   @@index([status])
@@ -230,8 +226,8 @@ model OccurrenceType {
   name              String   @unique
   // Desconta das horas previstas no acompanhamento gerencial
   countsAsAbsence   Boolean  @default(true)
-  // Exige horário inicial e final (ausências parciais, atrasos, saídas)
-  requiresTimeRange Boolean  @default(false)
+  // Como o horário é informado: turno inteiro, chegada, saída ou período
+  timeMode          OccurrenceTimeMode @default(NONE)
   // Tipos médicos: conteúdo restrito, nunca indexado nem exportado por padrão
   isMedical         Boolean  @default(false)
   // Tipos de sistema não podem ser removidos
@@ -241,6 +237,16 @@ model OccurrenceType {
   updatedAt         DateTime @updatedAt
 
   occurrences AttendanceOccurrence[]
+}
+
+// NONE: turno inteiro · ARRIVAL: informa a hora de chegada (atraso) · DEPARTURE: informa a
+// hora de saída (saída antecipada) · RANGE: informa início e fim (ausência parcial).
+// Para ARRIVAL/DEPARTURE o período é completado com a jornada prevista do colaborador.
+enum OccurrenceTimeMode {
+  NONE
+  ARRIVAL
+  DEPARTURE
+  RANGE
 }
 
 enum ReviewStatus {
@@ -301,11 +307,11 @@ model Attachment {
 
 // ─────────────────────────── Desempenho ───────────────────────────
 
-model MonthlyMetric {
+// Indicadores lançados por dia; visões mensais são agregadas a partir deles.
+model DailyMetric {
   id               String   @id @default(uuid(7)) @db.Uuid
   employeeId       String   @db.Uuid
-  // Primeiro dia do mês de referência
-  month            DateTime @db.Date
+  date             DateTime @db.Date
   ticketsHandled   Int
   avgHandleMinutes Decimal  @db.Decimal(8, 2)
   avgRating        Decimal  @db.Decimal(4, 2)
@@ -316,15 +322,15 @@ model MonthlyMetric {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  employee  Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  revisions MonthlyMetricRevision[]
+  employee  Employee              @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  revisions DailyMetricRevision[]
 
-  @@unique([employeeId, month])
-  @@index([month])
+  @@unique([employeeId, date])
+  @@index([date])
 }
 
 // Cada correção guarda os valores anteriores, preservando o original.
-model MonthlyMetricRevision {
+model DailyMetricRevision {
   id               String   @id @default(uuid(7)) @db.Uuid
   metricId         String   @db.Uuid
   ticketsHandled   Int
@@ -335,7 +341,7 @@ model MonthlyMetricRevision {
   changedById      String?  @db.Uuid
   createdAt        DateTime @default(now())
 
-  metric MonthlyMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  metric DailyMetric @relation(fields: [metricId], references: [id], onDelete: Cascade)
 
   @@index([metricId, createdAt])
 }
@@ -405,7 +411,6 @@ model Meeting {
   agendaItems  MeetingAgendaItem[]
   decisions    MeetingDecision[]
   participants MeetingParticipant[]
-  tasks        Task[]
 
   @@unique([seriesId, date])
   @@index([date])
@@ -428,7 +433,7 @@ model MeetingAgendaItem {
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
-// Decisões e encaminhamentos definidos (ações viram Task vinculada)
+// Decisões e encaminhamentos definidos
 model MeetingDecision {
   id          String   @id @default(uuid(7)) @db.Uuid
   meetingId   String   @db.Uuid
@@ -488,7 +493,6 @@ model Feedback {
   updatedAt      DateTime       @updatedAt
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  tasks    Task[]
 
   @@index([employeeId, date])
   @@index([status])
@@ -519,67 +523,4 @@ model EmployeeNote {
 
   @@index([employeeId, date])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
-}
-
-// ─────────────────────────── Tarefas ───────────────────────────
-
-enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-
-enum TaskStatus {
-  PENDING
-  IN_PROGRESS
-  DONE
-  CANCELED
-}
-
-model Task {
-  id                 String       @id @default(uuid(7)) @db.Uuid
-  code               Int          @unique @default(autoincrement())
-  title              String
-  description        String?
-  priority           TaskPriority @default(MEDIUM)
-  status             TaskStatus   @default(PENDING)
-  dueDate            DateTime?    @db.Date
-  completedAt        DateTime?
-  assigneeUserId     String?      @db.Uuid
-  assigneeEmployeeId String?      @db.Uuid
-  employeeId         String?      @db.Uuid
-  meetingId          String?      @db.Uuid
-  feedbackId         String?      @db.Uuid
-  searchText         String       @default("")
-  deletedAt          DateTime?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-
-  assigneeUser     User?       @relation("TaskAssigneeUser", fields: [assigneeUserId], references: [id], onDelete: SetNull)
-  assigneeEmployee Employee?   @relation("TaskAssigneeEmployee", fields: [assigneeEmployeeId], references: [id], onDelete: SetNull)
-  employee         Employee?   @relation("TaskRelatedEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
-  meeting          Meeting?    @relation(fields: [meetingId], references: [id], onDelete: SetNull)
-  feedback         Feedback?   @relation(fields: [feedbackId], references: [id], onDelete: SetNull)
-  events           TaskEvent[]
-
-  @@index([status, dueDate])
-  @@index([employeeId])
-  @@index([meetingId])
-  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
-}
-
-model TaskEvent {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  taskId    String   @db.Uuid
-  userId    String?  @db.Uuid
-  field     String
-  fromValue String?
-  toValue   String?
-  createdAt DateTime @default(now())
-
-  task Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([taskId, createdAt])
 }

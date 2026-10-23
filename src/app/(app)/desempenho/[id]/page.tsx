@@ -5,7 +5,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
 import { env } from "@/lib/env";
 import { assertUuid, orNotFound } from "@/lib/page";
-import { formatDateTime, formatMonthLong } from "@/lib/dates";
+import { formatDate, formatDateTime, formatWeekday, monthKey } from "@/lib/dates";
 import { formatCode } from "@/lib/text";
 import { readParams } from "@/lib/validation";
 import { getMetric } from "@/modules/metrics/service";
@@ -13,7 +13,7 @@ import { correctMetricAction } from "@/modules/metrics/actions";
 import { ActionForm, FormMessage, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
 import { DescriptionList, Notice, PageHeader, Panel } from "@/components/ui/primitives";
 
-export const metadata: Metadata = { title: "Lançamento mensal" };
+export const metadata: Metadata = { title: "Lançamento do dia" };
 
 const dec = (v: unknown) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -27,19 +27,19 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
     <>
       <PageHeader
         eyebrow={`${formatCode("employee", m.employee.code)} · Desempenho`}
-        title={`${m.employee.fullName} — ${formatMonthLong(m.month)}`}
-        actions={<Link className="btn btn-ghost" href={`/desempenho?colaborador=${m.employee.id}`}>Ver evolução</Link>}
+        title={`${m.employee.fullName} — ${formatWeekday(m.date)}, ${formatDate(m.date)}`}
+        actions={<Link className="btn btn-ghost" href={`/desempenho?colaborador=${m.employee.id}&mes=${monthKey(m.date)}`}>Ver evolução</Link>}
       />
       {params.salvo ? <div className="mb-6"><Notice tone="ok">Lançamento salvo.</Notice></div> : null}
-      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[3fr_2fr]">
-        <div className="flex flex-col gap-[18px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
+        <div className="flex flex-col gap-5">
           <Panel title="Valores vigentes">
             <DescriptionList
               items={[
                 { label: "Chamados atendidos", value: m.ticketsHandled.toLocaleString("pt-BR") },
                 { label: "Tempo médio de atendimento", value: `${dec(m.avgHandleMinutes)} min` },
                 { label: "Avaliação média", value: dec(m.avgRating) },
-                { label: "Contexto no mês", value: `${m.jobTitleSnapshot} · ${m.teamSnapshot}` },
+                { label: "Função e equipe no dia", value: `${m.jobTitleSnapshot} · ${m.teamSnapshot}` },
                 { label: "Lançado em", value: formatDateTime(m.createdAt, tz) },
               ]}
             />

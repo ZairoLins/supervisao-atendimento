@@ -69,7 +69,7 @@ export default async function ConsolidatedPage(props: PageProps<"/frequencia/con
               </tbody>
               <tfoot>
                 <tr>
-                  <td className="px-3 py-3 text-xs font-medium uppercase">Total</td>
+                  <td className="px-3 py-3 text-xs font-medium">Total</td>
                   <td />
                   <td className="px-3 py-3 text-right tabular-nums">{formatDuration(totals.planned)}</td>
                   <td className="px-3 py-3 text-right tabular-nums">{formatDuration(totals.absence)}</td>

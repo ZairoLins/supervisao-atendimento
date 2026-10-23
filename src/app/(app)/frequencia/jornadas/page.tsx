@@ -40,8 +40,8 @@ export default async function SchedulesPage(props: PageProps<"/frequencia/jornad
       <PageHeader eyebrow="Frequência e escalas" title="Jornadas e vigências" description="Modelos de jornada e o histórico de atribuição a cada colaborador. Uma nova atribuição encerra a anterior sem apagá-la." />
       <AttendanceNav active="jornadas" />
       {params.salvo ? <div className="mb-6"><Notice tone="ok">Jornada salva.</Notice></div> : null}
-      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[3fr_2fr]">
-        <div className="flex flex-col gap-[18px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[3fr_2fr]">
+        <div className="flex flex-col gap-5">
           <Panel title="Modelos de jornada">
             <div className="table-wrap">
               <table className="table">
@@ -97,7 +97,7 @@ export default async function SchedulesPage(props: PageProps<"/frequencia/jornad
         </div>
 
         {canWrite ? (
-          <div className="flex flex-col gap-[18px]">
+          <div className="flex flex-col gap-5">
             <Panel title="Atribuir jornada" description="Para 12x36, informe uma data em que o colaborador trabalha (referência do ciclo).">
               {employees.length === 0 ? (
                 <p className="text-sm text-muted">Cadastre colaboradores primeiro.</p>

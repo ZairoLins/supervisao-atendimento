@@ -9,7 +9,7 @@ import { Highlight } from "./highlight";
 type Status = "idle" | "loading" | "done" | "error";
 
 const DEBOUNCE_MS = 250;
-const PLACEHOLDER = "Pesquisar colaboradores, reuniões, métricas, tarefas...";
+const PLACEHOLDER = "Pesquisar colaboradores, reuniões, métricas, ocorrências...";
 
 export function CommandPalette() {
   const router = useRouter();
@@ -127,7 +127,7 @@ export function CommandPalette() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full max-w-xl items-center gap-3 border-b border-driftwood px-1 py-2 text-left text-sm text-subtle transition-colors hover:border-cream hover:text-muted"
+        className="flex w-full max-w-xl items-center gap-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-sm text-subtle transition-colors hover:border-line-strong hover:bg-surface"
         aria-haspopup="dialog"
       >
         <Search className="size-4 shrink-0" aria-hidden />
@@ -143,9 +143,9 @@ export function CommandPalette() {
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center px-3 pt-[8vh] sm:px-6" role="presentation">
-          <button type="button" aria-label="Fechar pesquisa" tabIndex={-1} className="absolute inset-0 bg-walnut/85" onClick={close} />
-          <div role="dialog" aria-modal="true" aria-label="Pesquisa global" className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-[12px] border border-cork bg-surface" onKeyDown={onKeyDown}>
-            <div className="flex items-center gap-3 border-b border-dashed border-cork px-5 py-4">
+          <button type="button" aria-label="Fechar pesquisa" tabIndex={-1} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={close} />
+          <div role="dialog" aria-modal="true" aria-label="Pesquisa global" className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onKeyDown={onKeyDown}>
+            <div className="flex items-center gap-3 border-b border-line px-5 py-4">
               {status === "loading" ? <LoaderCircle className="size-4 shrink-0 animate-spin text-subtle" aria-hidden /> : <Search className="size-4 shrink-0 text-subtle" aria-hidden />}
               <input
                 ref={inputRef}
@@ -153,7 +153,7 @@ export function CommandPalette() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={PLACEHOLDER}
-                className="w-full bg-transparent text-base text-cream placeholder:text-subtle focus:outline-none"
+                className="w-full bg-transparent text-base text-ink placeholder:text-subtle focus:outline-none"
                 role="combobox"
                 aria-expanded={flat.length > 0}
                 aria-controls={listId}
@@ -171,8 +171,8 @@ export function CommandPalette() {
             <div className="flex-1 overflow-y-auto px-2 py-2" aria-live="polite">
               {status === "idle" ? (
                 <div className="px-3 py-6 text-sm text-muted">
-                  <p className="subheading mb-3 text-cream">Pesquisa global</p>
-                  <p>Digite ao menos 2 caracteres. Você pode buscar nomes, títulos, palavras de pautas e identificadores como <span className="text-cream">TAR-12</span> ou <span className="text-cream">COL-3</span>.</p>
+                  <p className="subheading mb-3 text-ink">Pesquisa global</p>
+                  <p>Digite ao menos 2 caracteres. Você pode buscar nomes, títulos, palavras de pautas e identificadores como <span className="font-medium text-ink">COL-3</span> ou <span className="font-medium text-ink">OCO-12</span>.</p>
                 </div>
               ) : null}
               {status === "loading" && !data ? <p className="px-3 py-6 text-sm text-muted">Pesquisando…</p> : null}
@@ -183,7 +183,7 @@ export function CommandPalette() {
               ) : null}
               {status === "done" && data && data.total === 0 ? (
                 <div className="px-3 py-6 text-sm text-muted">
-                  <p className="subheading mb-2 text-cream">Nenhum resultado</p>
+                  <p className="subheading mb-2 text-ink">Nenhum resultado</p>
                   <p>Nada encontrado para “{data.query}”. Verifique a grafia ou tente um termo mais curto.</p>
                 </div>
               ) : null}
@@ -205,7 +205,7 @@ export function CommandPalette() {
                               aria-selected={selected}
                               onMouseEnter={() => setActive(i)}
                               onClick={() => go(r.url)}
-                              className={`flex cursor-pointer items-start gap-3 rounded-[10px] px-3 py-2.5 ${selected ? "bg-bark" : ""}`}
+                              className={`flex cursor-pointer items-start gap-3 rounded-[10px] px-3 py-2.5 ${selected ? "bg-primary-soft" : ""}`}
                             >
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm">
@@ -216,7 +216,7 @@ export function CommandPalette() {
                                 </p>
                               </div>
                               {r.date ? <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-subtle">{r.date}</span> : null}
-                              {selected ? <CornerDownLeft className="mt-0.5 size-3.5 shrink-0 text-subtle" aria-hidden /> : null}
+                              {selected ? <CornerDownLeft className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden /> : null}
                             </li>
                           );
                         })}
@@ -227,7 +227,7 @@ export function CommandPalette() {
               ) : null}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-dashed border-cork px-5 py-3 text-[11px] text-subtle">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line px-5 py-3 text-[11px] text-subtle">
               <span className="hidden gap-3 sm:flex">
                 <span><kbd className="kbd">↑</kbd> <kbd className="kbd">↓</kbd> navegar</span>
                 <span><kbd className="kbd">Enter</kbd> abrir</span>
@@ -239,7 +239,7 @@ export function CommandPalette() {
                   id={`${listId}-opt-${flat.length}`}
                   onClick={() => go(fullResultsUrl)}
                   onMouseEnter={() => setActive(flat.length)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 font-medium uppercase ${active === flat.length ? "bg-bark text-cream" : "text-muted hover:text-cream"}`}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2 py-1 font-medium ${active === flat.length ? "bg-primary text-white" : "text-primary hover:bg-primary-soft"}`}
                 >
                   Ver todos os resultados <ArrowRight className="size-3" aria-hidden />
                 </button>

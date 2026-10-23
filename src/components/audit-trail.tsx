@@ -48,7 +48,7 @@ export async function AuditTrail({ actor, entityType, entityId }: { actor: Actor
           const changes = (l.changes ?? {}) as Record<string, { from: unknown; to: unknown }>;
           const keys = Object.keys(changes).filter((k) => k !== "searchText");
           return (
-            <li key={l.id} className="border-b border-dashed border-cork pb-4 last:border-0 last:pb-0">
+            <li key={l.id} className="border-b border-line pb-4 last:border-0 last:pb-0">
               <p>{l.summary}</p>
               <p className="mt-0.5 text-xs text-subtle">
                 {formatDateTime(l.createdAt, tz)} · {l.user?.name ?? "Sistema"}

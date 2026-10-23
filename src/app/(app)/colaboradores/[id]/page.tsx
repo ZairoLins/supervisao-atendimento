@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarDays, ClipboardList, MessageSquareText, NotebookPen, Pencil, Plus } from "lucide-react";
+import { CalendarDays, MessageSquareText, NotebookPen, Pencil, Plus } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { can, type Actor } from "@/lib/permissions";
 import { assertUuid, orNotFound, today } from "@/lib/page";
-import { addDays, formatDate, formatDateTime, formatDuration, formatMonth, formatTimeRange, startOfMonth, toDateKey } from "@/lib/dates";
-import { EMPLOYEE_STATUS, FEEDBACK_STATUS, FEEDBACK_TYPE, NOTE_CATEGORY, REVIEW_STATUS, TASK_PRIORITY, TASK_STATUS, options } from "@/lib/labels";
+import { addDays, formatDate, formatDateTime, formatDuration, formatTimeRange, startOfMonth, toDateKey } from "@/lib/dates";
+import { EMPLOYEE_STATUS, FEEDBACK_STATUS, FEEDBACK_TYPE, NOTE_CATEGORY, REVIEW_STATUS, options } from "@/lib/labels";
 import { formatCode } from "@/lib/text";
 import { readParams } from "@/lib/validation";
 import { getEmployee } from "@/modules/employees/service";
@@ -16,14 +16,13 @@ import { loadRules } from "@/modules/attendance/schedules";
 import { findAssignment } from "@/modules/attendance/rules";
 import { listMetrics, metricSeries } from "@/modules/metrics/service";
 import { listFeedbacks, listNotes } from "@/modules/feedbacks/service";
-import { isOverdue, listTasks } from "@/modules/tasks/service";
 import { ActionForm, FormMessage, Hidden, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
-import { Badge, DescriptionList, EmptyState, LabelBadge, Notice, PageHeader, Panel, Stat, Tabs } from "@/components/ui/primitives";
+import { DescriptionList, EmptyState, LabelBadge, Notice, PageHeader, Panel, Stat, Tabs } from "@/components/ui/primitives";
 import { MetricTrend } from "@/components/charts/metric-trend";
 
 export const metadata: Metadata = { title: "Perfil do colaborador" };
 
-const TABS = ["resumo", "desempenho", "frequencia", "feedbacks", "anotacoes", "tarefas"] as const;
+const TABS = ["resumo", "desempenho", "frequencia", "feedbacks", "anotacoes"] as const;
 type Tab = (typeof TABS)[number];
 
 export default async function EmployeeProfilePage(props: PageProps<"/colaboradores/[id]">) {
@@ -37,7 +36,6 @@ export default async function EmployeeProfilePage(props: PageProps<"/colaborador
     { key: "frequencia", label: "Frequência", show: can(actor, "attendance:read") },
     { key: "feedbacks", label: "Feedbacks", show: can(actor, "feedbacks:read") },
     { key: "anotacoes", label: "Anotações", show: can(actor, "notes:read") },
-    { key: "tarefas", label: "Tarefas relacionadas", show: can(actor, "tasks:read") },
   ].filter((t) => t.show);
   const requested = (TABS as readonly string[]).includes(params.aba ?? "") ? (params.aba as Tab) : "resumo";
   const tab: Tab = tabs.some((t) => t.key === requested) ? requested : "resumo";
@@ -77,7 +75,6 @@ export default async function EmployeeProfilePage(props: PageProps<"/colaborador
       {tab === "frequencia" ? <Attendance actor={actor} employeeId={id} /> : null}
       {tab === "feedbacks" ? <Feedbacks actor={actor} employeeId={id} /> : null}
       {tab === "anotacoes" ? <Notes actor={actor} employeeId={id} inactive={inactive} /> : null}
-      {tab === "tarefas" ? <Tasks actor={actor} employeeId={id} /> : null}
     </>
   );
 }
@@ -90,7 +87,7 @@ async function Summary({ actor, employee }: { actor: Actor; employee: EmployeeRo
   const current = rules ? findAssignment(rules.assignments, t) : null;
   const inactive = employee.status === "INACTIVE";
   return (
-    <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[2fr_1fr]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[2fr_1fr]">
       <Panel title="Dados cadastrais">
         <DescriptionList
           items={[
@@ -109,7 +106,7 @@ async function Summary({ actor, employee }: { actor: Actor; employee: EmployeeRo
         <p className="eyebrow mb-2">Observações profissionais gerais</p>
         <p className="whitespace-pre-line text-sm text-muted">{employee.generalNotes || "Sem observações."}</p>
       </Panel>
-      <div className="flex flex-col gap-[18px]">
+      <div className="flex flex-col gap-5">
         {rules ? (
           <Panel title="Escala" actions={<Link href={`/frequencia/escala/${employee.id}`} className="btn btn-secondary btn-sm"><CalendarDays className="size-3.5" aria-hidden /> Ver calendário</Link>}>
             {rules.assignments.length === 0 ? (
@@ -117,7 +114,7 @@ async function Summary({ actor, employee }: { actor: Actor; employee: EmployeeRo
             ) : (
               <ul className="flex flex-col gap-3 text-sm">
                 {[...rules.assignments].reverse().map((a) => (
-                  <li key={a.id} className="border-b border-dashed border-cork pb-3 last:border-0">
+                  <li key={a.id} className="border-b border-line pb-3 last:border-0">
                     <p>{a.schedule.name}</p>
                     <p className="text-xs text-subtle">
                       {formatDate(a.validFrom)} — {a.validTo ? formatDate(a.validTo) : "atual"}
@@ -155,33 +152,33 @@ async function Performance({ actor, employeeId }: { actor: Actor; employeeId: st
     listMetrics(db, actor, { employeeId, page: 1 }),
   ]);
   return (
-    <div className="flex flex-col gap-[18px]">
+    <div className="flex flex-col gap-5">
       <Panel
         title="Evolução — últimos 12 meses"
         actions={
           <>
             <Link href={`/desempenho?colaborador=${employeeId}`} className="btn btn-ghost btn-sm">Análise completa</Link>
-            {can(actor, "metrics:write") ? <Link href={`/desempenho/lancar?colaborador=${employeeId}`} className="btn btn-secondary btn-sm"><Plus className="size-3.5" aria-hidden /> Lançar mês</Link> : null}
+            {can(actor, "metrics:write") ? <Link href="/desempenho/lancar" className="btn btn-secondary btn-sm"><Plus className="size-3.5" aria-hidden /> Lançar métricas do dia</Link> : null}
           </>
         }
       >
         {list.total === 0 ? (
-          <EmptyState title="Sem métricas lançadas" description="Lance os indicadores mensais deste colaborador para acompanhar a evolução." />
+          <EmptyState title="Sem métricas lançadas" description="Lance as métricas do dia para acompanhar a evolução deste colaborador." />
         ) : (
           <MetricTrend data={series} primaryLabel="Colaborador" />
         )}
       </Panel>
       {list.total > 0 ? (
-        <Panel title="Lançamentos">
+        <Panel title="Lançamentos recentes">
           <div className="table-wrap">
             <table className="table">
               <thead>
-                <tr><th>Mês</th><th className="text-right">Chamados</th><th className="text-right">TMA (min)</th><th className="text-right">Avaliação</th><th>Correções</th></tr>
+                <tr><th>Data</th><th className="text-right">Chamados</th><th className="text-right">TMA (min)</th><th className="text-right">Avaliação</th><th>Correções</th></tr>
               </thead>
               <tbody>
                 {list.items.map((m) => (
                   <tr key={m.id}>
-                    <td><Link className="link" href={`/desempenho/${m.id}`}>{formatMonth(m.month)}</Link></td>
+                    <td><Link className="link" href={`/desempenho/${m.id}`}>{formatDate(m.date)}</Link></td>
                     <td className="text-right tabular-nums">{m.ticketsHandled.toLocaleString("pt-BR")}</td>
                     <td className="text-right tabular-nums">{Number(m.avgHandleMinutes).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
                     <td className="text-right tabular-nums">{Number(m.avgRating).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
@@ -207,8 +204,8 @@ async function Attendance({ actor, employeeId }: { actor: Actor; employeeId: str
     listOccurrences(db, actor, { employeeId, page: 1 }),
   ]);
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div className="grid grid-cols-2 gap-[18px] lg:grid-cols-4">
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
         <Stat label="Previsto no mês (até hoje)" value={formatDuration(month.plannedMinutes)} hint={`${month.plannedDays} turno(s) · ${month.offDays} folga(s)`} />
         <Stat label="Ausências no mês" value={formatDuration(month.absenceMinutes)} />
         <Stat label="Ausências — 30 dias" value={formatDuration(rolling.absenceMinutes)} />
@@ -244,7 +241,7 @@ async function Attendance({ actor, employeeId }: { actor: Actor; employeeId: str
           </div>
         )}
         {occs.total > occs.items.length ? (
-          <Link href={`/frequencia?colaborador=${employeeId}`} className="link mt-4 inline-block text-xs uppercase">Ver todas as {occs.total} ocorrências</Link>
+          <Link href={`/frequencia?colaborador=${employeeId}`} className="link mt-4 inline-block text-xs">Ver todas as {occs.total} ocorrências</Link>
         ) : null}
       </Panel>
     </div>
@@ -261,10 +258,10 @@ async function Feedbacks({ actor, employeeId }: { actor: Actor; employeeId: stri
       {list.total === 0 ? (
         <EmptyState icon={<MessageSquareText className="size-6" />} title="Nenhum feedback registrado" description="Registre conversas de reconhecimento, desenvolvimento ou alinhamento." />
       ) : (
-        <ol className="relative ml-2 border-l border-dashed border-cork">
+        <ol className="relative ml-2 border-l border-line">
           {list.items.map((f) => (
             <li key={f.id} className="mb-6 ml-6 last:mb-0">
-              <span className="absolute -left-[5px] mt-1.5 size-2.5 rounded-full border border-driftwood bg-walnut" aria-hidden />
+              <span className="absolute -left-[5px] mt-1.5 size-2.5 rounded-full border border-line-strong bg-canvas" aria-hidden />
               <p className="eyebrow">{formatDate(f.date)} · {formatCode("feedback", f.code)}</p>
               <p className="mt-1.5 flex flex-wrap items-center gap-2">
                 <Link href={`/feedbacks/${f.id}`} className="link">{FEEDBACK_TYPE[f.type].label}</Link>
@@ -284,14 +281,14 @@ async function Notes({ actor, employeeId, inactive }: { actor: Actor; employeeId
   const notes = await listNotes(db, actor, employeeId);
   const t = today();
   return (
-    <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-[1fr_380px]">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_380px]">
       <Panel title="Anotações profissionais" description="Separadas de feedbacks e de registros de frequência.">
         {notes.length === 0 ? (
           <EmptyState icon={<NotebookPen className="size-6" />} title="Nenhuma anotação" description="Registre observações objetivas e profissionais relevantes à supervisão." />
         ) : (
           <ul className="flex flex-col gap-5">
             {notes.map((n) => (
-              <li key={n.id} id={`nota-${n.id}`} className="border-b border-dashed border-cork pb-5 last:border-0 last:pb-0">
+              <li key={n.id} id={`nota-${n.id}`} className="border-b border-line pb-5 last:border-0 last:pb-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="eyebrow">{formatDate(n.date)}</p>
                   <LabelBadge map={NOTE_CATEGORY} value={n.category} />
@@ -325,39 +322,5 @@ async function Notes({ actor, employeeId, inactive }: { actor: Actor; employeeId
         </Panel>
       ) : null}
     </div>
-  );
-}
-
-async function Tasks({ actor, employeeId }: { actor: Actor; employeeId: string }) {
-  const t = today();
-  const list = await listTasks(db, actor, { employeeId, page: 1 }, t);
-  return (
-    <Panel
-      title="Tarefas relacionadas"
-      actions={can(actor, "tasks:write") ? <Link href={`/tarefas/nova?colaborador=${employeeId}`} className="btn btn-secondary btn-sm"><Plus className="size-3.5" aria-hidden /> Nova tarefa</Link> : null}
-    >
-      {list.total === 0 ? (
-        <EmptyState icon={<ClipboardList className="size-6" />} title="Nenhuma tarefa relacionada" description="Tarefas vinculadas a este colaborador aparecerão aqui." />
-      ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead><tr><th>ID</th><th>Tarefa</th><th>Prioridade</th><th>Status</th><th>Prazo</th></tr></thead>
-            <tbody>
-              {list.items.map((task) => (
-                <tr key={task.id}>
-                  <td className="text-xs text-subtle">{formatCode("task", task.code)}</td>
-                  <td><Link className="link" href={`/tarefas/${task.id}`}>{task.title}</Link></td>
-                  <td><LabelBadge map={TASK_PRIORITY} value={task.priority} /></td>
-                  <td><LabelBadge map={TASK_STATUS} value={task.status} /></td>
-                  <td className="whitespace-nowrap tabular-nums">
-                    {task.dueDate ? formatDate(task.dueDate) : "—"} {isOverdue(task, t) ? <Badge tone="danger">Atrasada</Badge> : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
   );
 }

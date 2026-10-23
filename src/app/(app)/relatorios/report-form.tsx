@@ -18,12 +18,6 @@ const STATUS_OPTIONS: Partial<Record<ReportKind, Opt[]>> = {
     { value: "DONE", label: "Realizada" },
     { value: "CANCELED", label: "Cancelada" },
   ],
-  tarefas: [
-    { value: "PENDING", label: "Pendente" },
-    { value: "IN_PROGRESS", label: "Em andamento" },
-    { value: "DONE", label: "Concluída" },
-    { value: "CANCELED", label: "Cancelada" },
-  ],
   feedbacks: [
     { value: "OPEN", label: "Aberto" },
     { value: "FOLLOW_UP", label: "Em acompanhamento" },
@@ -91,7 +85,7 @@ export function ReportForm({
         <legend className="label">Relatório</legend>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
           {kinds.map((k) => (
-            <label key={k} className={`cursor-pointer rounded-[12px] border p-4 transition-colors ${kind === k ? "border-cream bg-surface-2" : "border-cork hover:border-driftwood"}`}>
+            <label key={k} className={`cursor-pointer rounded-[12px] border p-4 transition-colors ${kind === k ? "border-primary bg-primary-soft ring-1 ring-primary" : "border-line bg-surface hover:border-line-strong"}`}>
               <input type="radio" name="tipo" value={k} checked={kind === k} onChange={() => { setKind(k); setState({ status: "idle" }); }} className="sr-only" />
               <span className="subheading block">{REPORT_LABELS[k].title}</span>
               <span className="mt-2 block text-xs text-subtle">{REPORT_LABELS[k].description}</span>
@@ -101,11 +95,11 @@ export function ReportForm({
       </fieldset>
 
       <div>
-        <label className="label" htmlFor="r-de">{kind === "tarefas" ? "Prazo a partir de" : "Período — de"}</label>
+        <label className="label" htmlFor="r-de">{"Período — de"}</label>
         <input id="r-de" type="date" name="de" className="input" />
       </div>
       <div>
-        <label className="label" htmlFor="r-ate">{kind === "tarefas" ? "Prazo até" : "Período — até"}</label>
+        <label className="label" htmlFor="r-ate">{"Período — até"}</label>
         <input id="r-ate" type="date" name="ate" className="input" />
         <p className="mt-1.5 text-xs text-subtle">Em branco: período padrão do relatório.</p>
       </div>
@@ -120,14 +114,14 @@ export function ReportForm({
         <div>
           <label className="label" htmlFor="r-st">Status</label>
           <select id="r-st" name="status" className="input" key={`s-${kind}`}>
-            <option value="">{kind === "tarefas" ? "Em aberto (padrão)" : "Todos"}</option>
+            <option value="">{"Todos"}</option>
             {statusOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
       ) : <div className="hidden md:block" />}
       {categoryOptions ? (
         <div>
-          <label className="label" htmlFor="r-cat">{kind === "metricas" ? "Equipe" : kind === "tarefas" ? "Prioridade" : kind === "frequencia" ? "Tipo de ocorrência" : "Tipo"}</label>
+          <label className="label" htmlFor="r-cat">{kind === "metricas" ? "Equipe" : kind === "frequencia" ? "Tipo de ocorrência" : "Tipo"}</label>
           <select id="r-cat" name="categoria" className="input" key={`c-${kind}`}>
             <option value="">Todos</option>
             {categoryOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -142,7 +136,7 @@ export function ReportForm({
         </label>
       ) : null}
       {kind === "feedbacks" ? (
-        <div className="flex flex-col gap-3 rounded-[12px] border border-dashed border-warn/40 p-4 md:col-span-2">
+        <div className="flex flex-col gap-3 rounded-[12px] border border-warn/40 p-4 md:col-span-2">
           <label className="flex cursor-pointer items-start gap-2.5 text-sm">
             <input type="checkbox" name="confirmar" value="1" className="checkbox mt-0.5" />
             <span>Confirmo a exportação de feedbacks individuais para uso restrito da supervisão.</span>

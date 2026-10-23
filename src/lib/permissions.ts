@@ -16,8 +16,6 @@ export const PERMISSIONS = [
   "feedbacks:write",
   "notes:read",
   "notes:write",
-  "tasks:read",
-  "tasks:write",
   "reports:export",
   "settings:manage",
   "audit:read",
@@ -28,7 +26,7 @@ export type Permission = (typeof PERMISSIONS)[number];
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   SUPERVISOR: PERMISSIONS,
   // Perfil auxiliar para uso futuro: sem acesso a frequência, feedbacks, anotações e auditoria.
-  ASSISTANT: ["employees:read", "metrics:read", "meetings:read", "meetings:write", "tasks:read", "tasks:write"],
+  ASSISTANT: ["employees:read", "metrics:read", "meetings:read", "meetings:write"],
 };
 
 export type Actor = {

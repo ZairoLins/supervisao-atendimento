@@ -23,13 +23,13 @@ export default async function TemplatesPage() {
   return (
     <>
       <PageHeader eyebrow="Reuniões" title="Modelos e recorrência" description="Modelos de pauta reutilizáveis e reuniões semanais recorrentes. Cada reunião gerada é independente e pode ser ajustada." />
-      <div className="grid grid-cols-1 gap-[18px] xl:grid-cols-2">
-        <div className="flex flex-col gap-[18px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="flex flex-col gap-5">
           <Panel title="Reuniões semanais recorrentes">
             {series.length === 0 ? <p className="mb-2 text-sm text-muted">Nenhuma série configurada.</p> : (
               <ul className="flex flex-col">
                 {series.map((s) => (
-                  <li key={s.id} className="flex flex-wrap items-start justify-between gap-3 border-b border-dashed border-cork py-4 first:pt-0 last:border-0">
+                  <li key={s.id} className="flex flex-wrap items-start justify-between gap-3 border-b border-line py-4 first:pt-0 last:border-0">
                     <div>
                       <p>{s.title} {s.active ? null : <Badge tone="neutral">Pausada</Badge>}</p>
                       <p className="mt-1 text-xs text-subtle">
@@ -69,12 +69,12 @@ export default async function TemplatesPage() {
           </Panel>
         </div>
 
-        <div className="flex flex-col gap-[18px]">
+        <div className="flex flex-col gap-5">
           <Panel title="Modelos de pauta">
             {templates.length === 0 ? <p className="text-sm text-muted">Nenhum modelo. Crie abaixo ou salve a pauta de uma reunião existente.</p> : (
               <ul className="flex flex-col">
                 {templates.map((t) => (
-                  <li key={t.id} className="border-b border-dashed border-cork py-4 first:pt-0 last:border-0">
+                  <li key={t.id} className="border-b border-line py-4 first:pt-0 last:border-0">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="flex items-center gap-2">{t.name} <LabelBadge map={MEETING_TYPE} value={t.type} /></p>
                       <ActionForm action={deleteTemplateAction.bind(null, t.id)}>

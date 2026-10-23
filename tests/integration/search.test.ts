@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { globalSearch } from "@/modules/search/service";
 import { createMeeting } from "@/modules/meetings/service";
-import { createTask } from "@/modules/tasks/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback, createNote } from "@/modules/feedbacks/service";
 import { createMetric } from "@/modules/metrics/service";
@@ -14,7 +13,6 @@ const titles = (r: Awaited<ReturnType<typeof globalSearch>>) => r.groups.flatMap
 describe.skipIf(!hasTestDb)("pesquisa global", () => {
   let sup: Actor;
   let asst: Actor;
-  let taskCode = 0;
 
   beforeAll(async () => {
     await resetDb();
@@ -35,9 +33,7 @@ describe.skipIf(!hasTestDb)("pesquisa global", () => {
       agenda: "Revisão da escala de dezembro\nIndicadores de satisfação",
       participantIds: [ana.id],
     });
-    const t = await createTask(testDb(), sup, { title: "Atualizar manual de atendimento", priority: "HIGH", employeeId: ana.id });
-    taskCode = t.code;
-    await createMetric(testDb(), sup, { employeeId: ana.id, month: "2026-09", ticketsHandled: "210", avgHandleMinutes: "7", avgRating: "9" });
+    await createMetric(testDb(), sup, { employeeId: ana.id, date: "2026-09-18", ticketsHandled: "210", avgHandleMinutes: "7", avgRating: "9" }, new Date(Date.UTC(2026, 9, 23)));
     const atestado = await occurrenceType("ATESTADO");
     await createOccurrence(testDb(), sup, { employeeId: ana.id, typeId: atestado.id, date: "2026-10-02", adminNotes: "Entregue na recepção", restrictedNotes: "Diagnóstico sigiloso XPTO" });
     await createFeedback(testDb(), sup, { employeeId: ana.id, date: "2026-10-03", type: "RECOGNITION", context: "Elogio de cliente sobre empatia", positives: "Detalhe privado da conversa" });
@@ -73,20 +69,22 @@ describe.skipIf(!hasTestDb)("pesquisa global", () => {
     expect(r2.groups.find((g) => g.type === "agenda")!.items[0].url).toMatch(/#pauta$/);
   });
 
-  it("encontra tarefa pelo título e por identificador", async () => {
-    const r = await globalSearch(testDb(), sup, "manual de atendimento", { limit: 5 });
-    expect(titles(r)).toContain("task:Atualizar manual de atendimento");
-    const code = `TAR-${String(taskCode).padStart(4, "0")}`;
-    const r2 = await globalSearch(testDb(), sup, code.toLowerCase(), { limit: 5 });
-    expect(r2.groups[0].type).toBe("task");
-    expect(r2.groups[0].items[0].score).toBeGreaterThanOrEqual(1000);
-    const r3 = await globalSearch(testDb(), sup, "COL-1", { limit: 5 });
-    expect(r3.groups[0].items[0].title).toBe("Ana Beatriz Conceição");
+  it("encontra por identificador", async () => {
+    const r = await globalSearch(testDb(), sup, "COL-1", { limit: 5 });
+    expect(r.groups[0].items[0].title).toBe("Ana Beatriz Conceição");
+    expect(r.groups[0].items[0].score).toBeGreaterThanOrEqual(1000);
+    const meeting = await testDb().meeting.findFirstOrThrow();
+    const r2 = await globalSearch(testDb(), sup, `reu-${meeting.code}`, { limit: 5 });
+    expect(r2.groups[0].type).toBe("meeting");
   });
 
-  it("encontra métricas por mês", async () => {
+  it("encontra métricas por mês e por dia", async () => {
     const r = await globalSearch(testDb(), sup, "09/2026", { limit: 5 });
     expect(r.groups.some((g) => g.type === "metric")).toBe(true);
+    const r2 = await globalSearch(testDb(), sup, "18/09/2026", { limit: 5, types: ["metric"] });
+    expect(r2.groups[0].items[0].title).toBe("Ana Beatriz Conceição — 18/09/2026");
+    const r3 = await globalSearch(testDb(), sup, "19/09/2026", { limit: 5, types: ["metric"] });
+    expect(r3.total).toBe(0);
   });
 
   it("retorna vazio para expressão sem resultados", async () => {

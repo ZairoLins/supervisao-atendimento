@@ -81,7 +81,7 @@ export default async function MeetingsPage(props: PageProps<"/reunioes">) {
           <>
             <ul className="flex flex-col">
               {result.items.map((m) => (
-                <li key={m.id} className="grid grid-cols-[72px_1fr] gap-4 border-b border-dashed border-cork py-4 first:pt-0 last:border-0 sm:grid-cols-[90px_1fr_auto]">
+                <li key={m.id} className="grid grid-cols-[72px_1fr] gap-4 border-b border-line py-4 first:pt-0 last:border-0 sm:grid-cols-[90px_1fr_auto]">
                   <div className="text-center">
                     <p className="eyebrow">{formatWeekday(m.date)}</p>
                     <p className="text-2xl font-medium tabular-nums leading-tight">{String(m.date.getUTCDate()).padStart(2, "0")}</p>
@@ -90,7 +90,7 @@ export default async function MeetingsPage(props: PageProps<"/reunioes">) {
                   <div className="min-w-0">
                     <Link href={`/reunioes/${m.id}`} className="link">{m.title}</Link>
                     <p className="mt-1 text-xs text-subtle">
-                      {formatCode("meeting", m.code)} · {formatTime(m.startMinute)}{m.endMinute ? `–${formatTime(m.endMinute)}` : ""} · {m._count.agendaItems} item(ns) de pauta · {m._count.participants} participante(s) · {m._count.tasks} ação(ões)
+                      {formatCode("meeting", m.code)} · {formatTime(m.startMinute)}{m.endMinute ? `–${formatTime(m.endMinute)}` : ""} · {m._count.agendaItems} item(ns) de pauta · {m._count.participants} participante(s) · {m._count.decisions} decisão(ões)
                     </p>
                   </div>
                   <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:justify-end">

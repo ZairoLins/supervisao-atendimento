@@ -80,22 +80,48 @@ describe.skipIf(!hasTestDb)("jornadas, escalas e ocorrências (banco)", () => {
     expect(s.absenceMinutes).toBe(240);
   });
 
-  it("exige horário para tipos parciais e impede ocorrência duplicada", async () => {
+  it("atraso: informa só a chegada e o início vem da escala; impede duplicidade", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
     const atraso = await occurrenceType("ATRASO");
-    await expect(createOccurrence(testDb(), sup, { employeeId: e.id, typeId: atraso.id, date: "2026-10-19" })).rejects.toThrow(/exige horário/);
-    const payload = { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", startTime: "08:00", endTime: "08:20" };
-    await createOccurrence(testDb(), sup, payload);
+    expect(atraso.timeMode).toBe("ARRIVAL");
+    // Sem jornada não há turno para completar o período
+    await expect(createOccurrence(testDb(), sup, { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", time: "08:20" })).rejects.toThrow(/Não há turno previsto/);
+    await assignSchedule(testDb(), sup, { employeeId: e.id, scheduleId: (await scheduleByName("Funcionário")).id, validFrom: "2026-01-01" });
+    await expect(createOccurrence(testDb(), sup, { employeeId: e.id, typeId: atraso.id, date: "2026-10-19" })).rejects.toThrow(/horário de chegada/);
+    await expect(createOccurrence(testDb(), sup, { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", time: "07:30" })).rejects.toThrow(/08:00–12:00 e 14:00–18:00/);
+    const payload = { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", time: "08:20" };
+    const o = await createOccurrence(testDb(), sup, payload);
+    expect([o.startMinute, o.endMinute]).toEqual([480, 500]);
     await expect(createOccurrence(testDb(), sup, payload)).rejects.toThrow(/mesmos dados/);
+    const s = await employeeAttendanceSummary(testDb(), sup, e.id, d("2026-10-19"), d("2026-10-19"));
+    expect(s.absenceMinutes).toBe(20);
+  });
+
+  it("saída antecipada: informa só a saída e o fim vem da escala (inclusive após a meia-noite)", async () => {
+    const sup = await createUser();
+    const e = await makeEmployee(sup);
+    const saida = await occurrenceType("SAIDA_ANTECIPADA");
+    await assignSchedule(testDb(), sup, { employeeId: e.id, scheduleId: (await scheduleByName("Funcionário")).id, validFrom: "2026-01-01" });
+    const o = await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: saida.id, date: "2026-10-19", time: "16:30" });
+    expect([o.startMinute, o.endMinute]).toEqual([990, 1080]);
+    const s = await employeeAttendanceSummary(testDb(), sup, e.id, d("2026-10-19"), d("2026-10-19"));
+    expect(s.absenceMinutes).toBe(90);
+
+    const n = await makeEmployee(sup);
+    await assignSchedule(testDb(), sup, { employeeId: n.id, scheduleId: (await scheduleByName("Plantonista noturno")).id, validFrom: "2026-10-01", cycleReferenceDate: "2026-10-01" });
+    const o2 = await createOccurrence(testDb(), sup, { employeeId: n.id, typeId: saida.id, date: "2026-10-01", time: "04:00" });
+    expect([o2.startMinute, o2.endMinute]).toEqual([1680, 1860]);
+    await expect(createOccurrence(testDb(), sup, { employeeId: n.id, typeId: saida.id, date: "2026-10-02", time: "04:00" })).rejects.toThrow(/Não há turno previsto/);
   });
 
   it("correção exige motivo e mantém auditoria com valores anteriores", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
+    await assignSchedule(testDb(), sup, { employeeId: e.id, scheduleId: (await scheduleByName("Funcionário")).id, validFrom: "2026-01-01" });
     const atraso = await occurrenceType("ATRASO");
-    const o = await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", startTime: "08:00", endTime: "08:20", restrictedNotes: "Dado sigiloso" });
-    const changed = { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", startTime: "08:00", endTime: "08:40" };
+    const o = await createOccurrence(testDb(), sup, { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", time: "08:20", restrictedNotes: "Dado sigiloso" });
+    const changed = { employeeId: e.id, typeId: atraso.id, date: "2026-10-19", time: "08:40" };
     await expect(updateOccurrence(testDb(), sup, o.id, changed)).rejects.toThrow();
     await updateOccurrence(testDb(), sup, o.id, { ...changed, reason: "Horário conferido no ponto" });
     const log = await testDb().auditLog.findFirstOrThrow({ where: { entityId: o.id, action: "CORRECT" } });

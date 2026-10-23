@@ -8,14 +8,14 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#100904",
-  colorScheme: "dark",
+  themeColor: "#0a0a0a",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="pt-BR" className="h-full">
-      <body className="min-h-full bg-walnut text-cream antialiased">{children}</body>
+      <body className="min-h-full bg-canvas text-ink antialiased">{children}</body>
     </html>
   );
 }

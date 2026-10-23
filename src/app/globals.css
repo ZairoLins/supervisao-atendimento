@@ -2,185 +2,184 @@
 @import "@fontsource-variable/inter";
 
 /*
- * Design system — adaptação administrativa da referência "ORYZO AI — Style Reference".
- * Canvas Walnut Shadow, tipografia Warm Cream, superfície Bark Brown, divisórias tracejadas
- * em Cork Border e o laranja Ember reservado a pequenos acentos editoriais.
+ * Design system — azul, branco e preto.
+ * Conteúdo em superfícies brancas sobre fundo claro, navegação lateral preta e azul
+ * como cor de ação e destaque. Estados sempre acompanhados de texto/ícone.
  */
 @theme {
-  --color-walnut: #100904;
-  --color-cream: #ffedd7;
-  --color-bark: #382416;
-  --color-cork: #40372e;
-  --color-driftwood: #6c5f51;
-  --color-ember: #dc5000;
+  --color-canvas: #f5f7fb;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f5f9;
+  --color-ink: #0b1220;
+  --color-muted: #475569;
+  --color-subtle: #64748b;
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
 
-  /* Derivados para leitura (contraste AA sobre o Walnut) */
-  --color-muted: #c9b8a3;
-  --color-subtle: #a3927e;
-  --color-surface: #1a110a;
-  --color-surface-2: #23170e;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-soft: #eff6ff;
+  --color-primary-ink: #1e40af;
 
-  /* Estados — sempre acompanhados de texto/ícone */
-  --color-ok: #b7cf98;
-  --color-warn: #f0c070;
-  --color-danger: #ff9c7a;
-  --color-info: #a9c7d8;
+  --color-sidebar: #0a0a0a;
+  --color-sidebar-2: #171717;
+
+  --color-ok: #15803d;
+  --color-ok-soft: #f0fdf4;
+  --color-warn: #b45309;
+  --color-warn-soft: #fffbeb;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fef2f2;
+  --color-info: #1d4ed8;
 
   --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  --radius-card: 12px;
-  --radius-pill: 36px;
-  --radius-outline: 22.5px;
-
-  --spacing-gap: 18px;
+  --radius-card: 14px;
+  --spacing-gap: 20px;
   --spacing-panel: 24px;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
 body {
-  background: var(--color-walnut);
-  color: var(--color-cream);
+  background: var(--color-canvas);
+  color: var(--color-ink);
   font-family: var(--font-sans);
-  font-feature-settings: "ss01" on, "cv11" on;
+  font-feature-settings: "cv11" on, "ss01" on;
   -webkit-font-smoothing: antialiased;
 }
 
 ::selection {
-  background: var(--color-bark);
-  color: var(--color-cream);
+  background: #bfdbfe;
+  color: var(--color-ink);
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-cream);
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
 @layer components {
-  /* Tipografia editorial: títulos, navegação e rótulos em caixa alta, peso 500 */
+  /* Tipografia */
   .display {
-    @apply text-3xl font-medium uppercase leading-[0.95] md:text-[41px];
+    @apply text-2xl font-semibold tracking-tight text-ink md:text-[28px] md:leading-9;
   }
   .heading {
-    @apply text-lg font-medium uppercase leading-none md:text-2xl md:leading-[1.09];
+    @apply text-lg font-semibold tracking-tight text-ink;
   }
   .subheading {
-    @apply text-sm font-medium uppercase leading-none tracking-normal;
+    @apply text-[15px] font-semibold text-ink;
   }
   .eyebrow {
-    @apply text-[11px] font-medium uppercase leading-tight text-subtle;
+    @apply text-xs font-medium text-subtle;
   }
   .label {
-    @apply mb-1.5 block text-[11px] font-medium uppercase text-muted;
+    @apply mb-1.5 block text-[13px] font-medium text-muted;
   }
   .accent {
-    @apply text-ember;
+    @apply text-primary;
   }
 
   /* Superfícies */
   .panel {
-    @apply rounded-[var(--radius-card)] border border-cork bg-surface p-[var(--spacing-panel)];
+    @apply rounded-[var(--radius-card)] border border-line bg-surface p-[var(--spacing-panel)] shadow-[0_1px_2px_rgba(15,23,42,0.04)];
   }
   .panel-tight {
-    @apply rounded-[var(--radius-card)] border border-cork bg-surface p-4;
+    @apply rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)];
   }
   .divider {
-    @apply border-0 border-t border-dashed border-cork;
+    @apply border-0 border-t border-line;
   }
 
   /* Botões */
   .btn {
-    @apply inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap px-5 py-2 text-xs font-medium uppercase transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply rounded-[var(--radius-pill)] border border-bark bg-bark text-cream hover:border-driftwood hover:bg-[#45301f];
+    @apply border border-primary bg-primary text-white shadow-sm hover:border-primary-hover hover:bg-primary-hover;
   }
   .btn-secondary {
-    @apply rounded-[var(--radius-outline)] border border-cream/70 bg-transparent text-cream hover:border-cream hover:bg-cream/5;
+    @apply border border-line-strong bg-surface text-ink shadow-sm hover:bg-surface-2;
   }
   .btn-ghost {
-    @apply rounded-[var(--radius-outline)] border border-transparent px-3 text-muted hover:text-cream hover:bg-cream/5;
+    @apply border border-transparent px-3 text-muted hover:bg-surface-2 hover:text-ink;
   }
   .btn-danger {
-    @apply rounded-[var(--radius-outline)] border border-danger/60 text-danger hover:bg-danger/10;
+    @apply border border-danger/30 bg-surface text-danger hover:bg-danger-soft;
   }
   .btn-sm {
-    @apply min-h-7 px-3 py-1 text-[11px];
+    @apply min-h-8 rounded-md px-3 py-1 text-[13px];
   }
   .link {
-    @apply font-medium text-cream underline decoration-cork decoration-1 underline-offset-4 hover:decoration-cream;
+    @apply font-medium text-ink underline decoration-line-strong decoration-1 underline-offset-4 hover:text-primary hover:decoration-primary;
   }
   .link-accent {
-    @apply font-medium text-ember underline decoration-ember/40 underline-offset-4 hover:decoration-ember;
+    @apply font-medium text-primary hover:underline;
   }
 
-  /* Campos minimalistas: linha inferior, sem caixa */
+  /* Campos */
   .input {
-    @apply block w-full rounded-none border-0 border-b border-driftwood bg-transparent px-0.5 py-2 text-sm text-cream placeholder:text-subtle/80 focus:border-cream focus:outline-none aria-invalid:border-danger disabled:opacity-60;
+    @apply block w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm text-ink shadow-sm placeholder:text-subtle/70 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none aria-invalid:border-danger aria-invalid:ring-danger/20 disabled:bg-surface-2 disabled:opacity-70;
   }
   select.input {
-    @apply cursor-pointer pr-6;
-  }
-  select.input option {
-    background: var(--color-surface-2);
-    color: var(--color-cream);
+    @apply cursor-pointer pr-8;
   }
   textarea.input {
-    @apply min-h-24 resize-y rounded-[6px] border border-driftwood px-3 focus:border-cream;
+    @apply min-h-24 resize-y;
   }
   .checkbox {
-    @apply size-4 cursor-pointer accent-[#6c5f51];
+    @apply size-4 cursor-pointer rounded accent-[#2563eb];
   }
 
   /* Etiquetas de status */
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase leading-4 whitespace-nowrap;
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium leading-5;
   }
   .badge-neutral {
-    @apply border-cork text-muted;
+    @apply bg-surface-2 text-muted;
   }
   .badge-ok {
-    @apply border-ok/40 text-ok;
+    @apply bg-ok-soft text-ok;
   }
   .badge-warn {
-    @apply border-warn/40 text-warn;
+    @apply bg-warn-soft text-warn;
   }
   .badge-danger {
-    @apply border-danger/50 text-danger;
+    @apply bg-danger-soft text-danger;
   }
   .badge-info {
-    @apply border-info/40 text-info;
+    @apply bg-primary-soft text-primary-ink;
   }
   .badge-accent {
-    @apply border-ember/50 text-ember;
+    @apply bg-ink text-white;
   }
 
-  /* Tabelas legíveis */
+  /* Tabelas */
   .table {
     @apply w-full border-collapse text-left text-sm;
   }
   .table thead th {
-    @apply border-b border-cork px-3 py-2.5 text-[11px] font-medium uppercase text-subtle whitespace-nowrap;
+    @apply border-b border-line bg-surface-2 px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-muted first:rounded-tl-lg last:rounded-tr-lg;
   }
   .table tbody td {
-    @apply border-b border-dashed border-cork/80 px-3 py-3 align-top;
+    @apply border-b border-line px-3 py-3 align-top;
   }
   .table tbody tr:hover td {
-    @apply bg-cream/[0.025];
+    @apply bg-primary-soft/40;
   }
   .table-wrap {
     @apply -mx-[var(--spacing-panel)] overflow-x-auto px-[var(--spacing-panel)];
   }
 
   .kbd {
-    @apply rounded border border-cork px-1.5 py-0.5 font-sans text-[10px] font-medium text-subtle;
+    @apply rounded border border-line-strong bg-surface px-1.5 py-0.5 font-sans text-[10px] font-medium text-subtle;
   }
 
   mark.hl {
-    @apply rounded-[2px] bg-ember/20 px-0.5 text-cream;
+    @apply rounded-[3px] bg-primary/15 px-0.5 text-ink;
   }
 }
 
@@ -188,6 +187,5 @@ body {
   html,
   body {
     background: #fff;
-    color: #000;
   }
 }

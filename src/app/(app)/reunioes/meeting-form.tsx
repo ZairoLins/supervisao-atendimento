@@ -47,7 +47,7 @@ export function MeetingForm({
         <CheckboxGroup name="participantIds" label="Participantes" options={employees} defaultValues={defaults.participantIds ?? []} columns={3} />
       </div>
       {!isEdit ? (
-        <fieldset className="grid grid-cols-1 gap-6 border-t border-dashed border-cork pt-6 md:col-span-2 md:grid-cols-2">
+        <fieldset className="grid grid-cols-1 gap-6 border-t border-line pt-6 md:col-span-2 md:grid-cols-2">
           <legend className="sr-only">Pauta planejada</legend>
           <TextAreaField name="agenda" label="Pauta planejada (um item por linha)" rows={6} className="md:col-span-2" hint="Se vazio, a pauta pode vir de um modelo ou de uma reunião anterior." />
           {templates?.length ? <SelectField name="templateId" label="Usar modelo" options={templates} placeholder="Nenhum" /> : null}

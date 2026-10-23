@@ -9,8 +9,6 @@ import type {
   ReviewStatus,
   Role,
   ScheduleKind,
-  TaskPriority,
-  TaskStatus,
 } from "@/generated/prisma/enums";
 
 export type Tone = "neutral" | "ok" | "warn" | "danger" | "info" | "accent";
@@ -75,20 +73,6 @@ export const NOTE_CATEGORY: LabelMap<NoteCategory> = {
   ALIGNMENT: { label: "Alinhamento", tone: "info" },
   DEVELOPMENT: { label: "Desenvolvimento", tone: "info" },
   OTHER: { label: "Outro", tone: "neutral" },
-};
-
-export const TASK_STATUS: LabelMap<TaskStatus> = {
-  PENDING: { label: "Pendente", tone: "warn" },
-  IN_PROGRESS: { label: "Em andamento", tone: "info" },
-  DONE: { label: "Concluída", tone: "ok" },
-  CANCELED: { label: "Cancelada", tone: "neutral" },
-};
-
-export const TASK_PRIORITY: LabelMap<TaskPriority> = {
-  LOW: { label: "Baixa", tone: "neutral" },
-  MEDIUM: { label: "Média", tone: "info" },
-  HIGH: { label: "Alta", tone: "warn" },
-  URGENT: { label: "Urgente", tone: "danger" },
 };
 
 export function options<T extends string>(map: LabelMap<T>): Array<{ value: T; label: string }> {
