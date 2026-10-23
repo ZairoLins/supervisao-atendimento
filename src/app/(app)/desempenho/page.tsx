@@ -99,7 +99,7 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
         <button type="submit" className="btn btn-secondary">Aplicar</button>
       </form>
 
-      <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="stat-strip mb-6 grid-cols-2 lg:grid-cols-4">
         <Stat label={`Chamados em ${formatMonth(month)}`} value={monthTotal.tickets?.toLocaleString("pt-BR") ?? "—"} hint={scopeLabel} />
         <Stat label="Tempo médio" value={monthTotal.aht === null ? "—" : `${fmt(monthTotal.aht)} min`} hint="Ponderado pelos chamados" />
         <Stat label="Avaliação média" value={fmt(monthTotal.rating)} hint={monthTotal.ratings !== null ? `${monthTotal.ratings.toLocaleString("pt-BR")} avaliação(ões) · ponderada` : "Escala de 0 a 10"} />

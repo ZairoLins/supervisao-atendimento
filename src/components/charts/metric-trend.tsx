@@ -29,13 +29,14 @@ export function shortMonth(key: string): string {
   return d ? `${d}/${m}` : `${MONTHS[Number(m) - 1]}/${y.slice(2)}`;
 }
 
-const BLUE = "#2563eb";
-const GRAY = "#94a3b8";
-const GRID = "#e2e8f0";
-const TICK = { fill: "#64748b", fontSize: 11 };
+const BLUE = "#2a45f0";
+const INK = "#121212";
+const GRAY = "#b5b1a7";
+const GRID = "#ebe8e1";
+const TICK = { fill: "#8a877f", fontSize: 11, fontFamily: "var(--font-mono)" };
 const TOOLTIP = {
-  contentStyle: { background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 10, color: "#0b1220", fontSize: 12, boxShadow: "0 8px 24px rgba(15,23,42,0.08)" },
-  labelStyle: { color: "#475569", marginBottom: 4 },
+  contentStyle: { background: "#ffffff", border: "1px solid #e7e4dc", borderRadius: 8, color: "#121212", fontSize: 12, boxShadow: "0 12px 30px -10px rgba(18,18,18,0.18)" },
+  labelStyle: { color: "#55534d", marginBottom: 4 },
 };
 
 function fmt(n: number | null | undefined, digits: number) {
@@ -71,7 +72,7 @@ export function MetricTrend({
 
   return (
     <div>
-      <div role="tablist" aria-label="Indicador" className="mb-4 inline-flex gap-1 rounded-lg bg-surface-2 p-1">
+      <div role="tablist" aria-label="Indicador" className="mb-5 inline-flex gap-5 border-b border-line">
         {(Object.keys(METRICS) as MetricKey[]).map((k) => (
           <button
             key={k}
@@ -79,7 +80,7 @@ export function MetricTrend({
             role="tab"
             aria-selected={metric === k}
             onClick={() => setMetric(k)}
-            className={`rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${metric === k ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"}`}
+            className={`-mb-px border-b-2 pb-2 text-[13px] font-medium transition-colors ${metric === k ? "border-ink text-ink" : "border-transparent text-subtle hover:text-ink"}`}
           >
             {METRICS[k].label}
           </button>
@@ -93,7 +94,7 @@ export function MetricTrend({
               <XAxis dataKey="label" tick={TICK} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={10} />
               <YAxis tick={TICK} tickLine={false} axisLine={false} allowDecimals={false} width={44} />
               <Tooltip cursor={{ fill: "rgba(37,99,235,0.06)" }} {...TOOLTIP} formatter={(v) => [fmt(typeof v === "number" ? v : null, 0), primaryLabel]} />
-              <Bar dataKey="tickets" fill={BLUE} radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+              <Bar dataKey="tickets" fill={INK} radius={[2, 2, 0, 0]} maxBarSize={22} isAnimationActive={false} />
             </BarChart>
           ) : (
             <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
@@ -149,7 +150,7 @@ export function CountBars({ data, label, height = 180 }: { data: Array<{ month: 
           <XAxis dataKey="label" tick={TICK} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={12} />
           <YAxis tick={TICK} tickLine={false} axisLine={false} allowDecimals={false} width={40} />
           <Tooltip cursor={{ fill: "rgba(37,99,235,0.06)" }} {...TOOLTIP} formatter={(v) => [String(v), label]} />
-          <Bar dataKey="value" fill={BLUE} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={false} />
+          <Bar dataKey="value" fill={INK} radius={[2, 2, 0, 0]} maxBarSize={28} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
     </div>

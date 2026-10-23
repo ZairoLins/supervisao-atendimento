@@ -205,7 +205,7 @@ async function Attendance({ actor, employeeId }: { actor: Actor; employeeId: str
   ]);
   return (
     <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+      <div className="stat-strip grid-cols-2 lg:grid-cols-4">
         <Stat label="Previsto no mês (até hoje)" value={formatDuration(month.plannedMinutes)} hint={`${month.plannedDays} turno(s) · ${month.offDays} folga(s)`} />
         <Stat label="Ausências no mês" value={formatDuration(month.absenceMinutes)} />
         <Stat label="Ausências — 30 dias" value={formatDuration(rolling.absenceMinutes)} />

@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { BarChart3, CalendarClock, Headset, ShieldCheck } from "lucide-react";
 import { getCurrentActor } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { ActionForm, FormMessage, SubmitButton, TextField } from "@/components/ui/form";
@@ -8,65 +7,61 @@ import { loginAction } from "./actions";
 
 export const metadata: Metadata = { title: "Entrar" };
 
-const HIGHLIGHTS = [
-  { icon: CalendarClock, text: "Frequência, escalas e plantões 12x36" },
-  { icon: BarChart3, text: "Métricas diárias e evolução da equipe" },
-  { icon: ShieldCheck, text: "Histórico preservado e auditoria" },
-];
+const MODULES = ["Frequência e escalas", "Desempenho semanal", "Reuniões e pautas", "Feedbacks", "Relatórios", "WhatsApp"];
 
 export default async function LoginPage() {
   if (await getCurrentActor()) redirect("/");
   const hasUsers = (await db.user.count()) > 0;
 
   return (
-    <main className="grid min-h-dvh grid-cols-1 lg:grid-cols-[1fr_1fr]">
-      <section className="relative hidden overflow-hidden bg-sidebar p-12 text-white lg:flex lg:flex-col lg:justify-between">
-        <div className="pointer-events-none absolute -right-32 -top-32 size-[420px] rounded-full bg-primary/30 blur-3xl" aria-hidden />
-        <div className="pointer-events-none absolute -bottom-40 -left-24 size-[360px] rounded-full bg-primary/20 blur-3xl" aria-hidden />
-        <div className="relative flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-primary">
-            <Headset className="size-5" aria-hidden />
-          </span>
-          <span className="text-lg font-semibold">Supervisão de Atendimento</span>
+    <main className="grid min-h-dvh grid-cols-1 bg-canvas lg:grid-cols-[1.15fr_1fr]">
+      <section className="relative isolate hidden flex-col justify-between overflow-hidden border-r border-line px-14 py-12 lg:flex">
+        <div className="flex items-baseline gap-2">
+          <span className="font-serif text-[28px] leading-none">Supervisão</span>
+          <span aria-hidden className="size-1.5 -translate-y-0.5 rounded-full bg-primary" />
         </div>
-        <div className="relative max-w-md">
-          <h1 className="text-4xl font-semibold leading-tight tracking-tight">A rotina da equipe, organizada em um só lugar.</h1>
-          <ul className="mt-8 flex flex-col gap-4">
-            {HIGHLIGHTS.map((h) => (
-              <li key={h.text} className="flex items-center gap-3 text-white/80">
-                <span className="grid size-9 place-items-center rounded-lg bg-white/10">
-                  <h.icon className="size-[18px]" aria-hidden />
-                </span>
-                {h.text}
+        <div className="max-w-xl">
+          <p className="eyebrow mb-6">Atendimento · uso interno</p>
+          <h1 className="font-serif text-[64px] leading-[0.98] tracking-[-0.02em] xl:text-[76px]">
+            A rotina da equipe, <em className="text-primary">em ordem.</em>
+          </h1>
+          <ul className="mt-10 flex flex-wrap gap-x-5 gap-y-2 text-[14px] text-muted">
+            {MODULES.map((m, i) => (
+              <li key={m} className="flex items-center gap-5">
+                {m}
+                {i < MODULES.length - 1 ? <span aria-hidden className="text-line-strong">/</span> : null}
               </li>
             ))}
           </ul>
         </div>
-        <p className="relative text-sm text-white/50">Ferramenta interna · acesso pela rede da empresa ou VPN</p>
+        <p className="font-mono text-[11px] tracking-[0.06em] text-subtle uppercase">Acesso pela rede da empresa ou VPN</p>
+        {/* Grade de linhas finas como textura */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 opacity-60 [background-image:linear-gradient(to_right,var(--color-line)_1px,transparent_1px)] [background-size:96px_100%] [mask-image:linear-gradient(to_bottom,transparent,black_30%,black_70%,transparent)]"
+        />
       </section>
 
-      <section className="flex items-center justify-center bg-surface px-4 py-12 sm:px-10">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="grid size-10 place-items-center rounded-xl bg-primary text-white">
-              <Headset className="size-5" aria-hidden />
-            </span>
-            <span className="text-lg font-semibold">Supervisão</span>
+      <section className="flex items-center justify-center px-5 py-12 sm:px-10">
+        <div className="w-full max-w-[380px]">
+          <div className="mb-12 flex items-baseline gap-2 lg:hidden">
+            <span className="font-serif text-[30px] leading-none">Supervisão</span>
+            <span aria-hidden className="size-1.5 -translate-y-0.5 rounded-full bg-primary" />
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Entrar</h2>
-          <p className="mb-8 mt-1 text-sm text-muted">Use o usuário e a senha fornecidos pela supervisão.</p>
+          <h2 className="font-serif text-[40px] leading-none">Entrar</h2>
+          <p className="mt-3 mb-9 text-[14.5px] text-muted">Use o usuário e a senha fornecidos pela supervisão.</p>
           {hasUsers ? (
             <ActionForm action={loginAction} className="flex flex-col gap-5">
               <TextField name="username" label="Usuário" autoComplete="username" required />
               <TextField name="password" label="Senha" type="password" autoComplete="current-password" required />
               <FormMessage />
-              <SubmitButton className="w-full">Entrar</SubmitButton>
+              <SubmitButton className="mt-1 w-full min-h-11">Entrar</SubmitButton>
             </ActionForm>
           ) : (
             <div className="panel text-sm text-muted">
               <p className="subheading mb-2">Nenhum usuário cadastrado</p>
               <p>Por segurança, o sistema não cria contas com senha padrão. No servidor, crie o usuário supervisor:</p>
-              <pre className="mt-4 overflow-x-auto rounded-lg bg-sidebar p-3 text-xs text-white">npm run user:create</pre>
+              <pre className="mt-4 overflow-x-auto rounded-lg bg-sidebar p-3 font-mono text-xs text-white">npm run user:create</pre>
             </div>
           )}
         </div>

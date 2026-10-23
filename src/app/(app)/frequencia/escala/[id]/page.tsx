@@ -44,7 +44,7 @@ export default async function EmployeeScalePage(props: PageProps<"/frequencia/es
       />
       <AttendanceNav active="escala" />
 
-      <div className="mb-5 grid grid-cols-2 gap-5 lg:grid-cols-4">
+      <div className="stat-strip mb-6 grid-cols-2 lg:grid-cols-4">
         <Stat label="Turnos previstos (efetivos)" value={cal.summary.plannedDays} hint={`${cal.summary.offDays} dia(s) de folga`} />
         <Stat label="Horas previstas" value={formatDuration(cal.summary.plannedMinutes)} />
         <Stat label="Ausências" value={formatDuration(cal.summary.absenceMinutes)} hint="Sem dupla contagem" />

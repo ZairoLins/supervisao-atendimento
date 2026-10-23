@@ -106,7 +106,7 @@ export function KanbanBoard({ cards: initial, weekKey, todayKey }: { cards: Boar
             <section
               key={col.key}
               aria-label={col.label}
-              className={cx("flex min-h-64 flex-col rounded-2xl border bg-surface-2/70 p-3 transition-colors", over?.column === col.key && dragId ? "border-primary bg-primary-soft/50" : "border-line")}
+              className={cx("flex min-h-64 flex-col rounded-[var(--radius-card)] border bg-surface-2/60 p-3 transition-colors", over?.column === col.key && dragId ? "border-primary bg-primary-soft/50" : "border-line")}
               onDragOver={(e) => {
                 if (!dragId) return;
                 e.preventDefault();
@@ -128,7 +128,7 @@ export function KanbanBoard({ cards: initial, weekKey, todayKey }: { cards: Boar
                   <span className={cx("size-2 rounded-full", col.dot)} aria-hidden />
                   {col.label}
                 </h2>
-                <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted tabular-nums">{list.length}</span>
+                <span className="font-mono text-xs text-subtle tabular-nums">{String(list.length).padStart(2, "0")}</span>
               </header>
               <ol className="flex flex-1 flex-col gap-2">
                 {list.length === 0 ? <li className="rounded-xl border border-dashed border-line-strong px-3 py-6 text-center text-xs text-subtle">{col.empty}</li> : null}
@@ -149,7 +149,7 @@ export function KanbanBoard({ cards: initial, weekKey, todayKey }: { cards: Boar
                         setOver(null);
                       }}
                       className={cx(
-                        "group relative cursor-grab rounded-xl border border-line bg-surface p-3 shadow-sm transition active:cursor-grabbing",
+                        "group relative cursor-grab rounded-[10px] border border-line bg-surface p-3 transition-colors hover:border-ink/25 active:cursor-grabbing",
                         dragId === card.id && "opacity-40",
                         over?.column === col.key && over.index === i && dragId && dragId !== card.id && "mt-3 before:absolute before:-top-2 before:left-2 before:right-2 before:h-0.5 before:rounded before:bg-primary",
                       )}
@@ -233,7 +233,7 @@ function EditDialog({ card, onClose }: { card: BoardCard; onClose: () => void })
     ref.current?.showModal();
   }, []);
   return (
-    <dialog ref={ref} onClose={onClose} className="m-auto w-[min(520px,calc(100vw-32px))] rounded-2xl border border-line bg-surface p-0 text-ink shadow-xl backdrop:bg-black/40">
+    <dialog ref={ref} onClose={onClose} className="m-auto w-[min(520px,calc(100vw-32px))] rounded-[14px] border border-line bg-surface p-0 text-ink shadow-[0_24px_60px_-12px_rgba(18,18,18,0.25)] backdrop:bg-ink/25">
       <div className="flex items-center justify-between border-b border-line px-5 py-3">
         <h2 className="text-base font-semibold">Editar tarefa</h2>
         <button type="button" className="btn btn-ghost btn-sm px-2" onClick={() => ref.current?.close()} aria-label="Fechar">

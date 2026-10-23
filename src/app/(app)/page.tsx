@@ -14,7 +14,9 @@ import { employeeOptions } from "@/modules/employees/service";
 import { Badge, EmptyState, Panel, Stat } from "@/components/ui/primitives";
 import { CountBars, MetricTrend } from "@/components/charts/metric-trend";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export const metadata: Metadata = { title: "Visão geral" };
+
+const longDate = new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
 
 function safeMonth(v: string | undefined, fallback: Date) {
   try {
@@ -66,20 +68,22 @@ export default async function DashboardPage(props: PageProps<"/">) {
 
   return (
     <>
-      <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <header className="mb-8 flex flex-col gap-6 border-b border-line pb-7 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="mb-1.5 text-sm font-medium text-primary">{formatDate(t)}</p>
-          <h1 className="display">Olá, {actor.name.split(" ")[0]}</h1>
-          <p className="mt-2 text-sm text-muted">Resumo da equipe com base nos registros do sistema.</p>
+          <p className="eyebrow mb-3">{longDate.format(t)}</p>
+          <h1 className="display">
+            Olá, <em className="text-primary">{actor.name.split(" ")[0]}</em>
+          </h1>
+          <p className="mt-3 text-[14.5px] text-muted">Resumo da equipe com base nos registros do sistema.</p>
         </div>
-        <form method="get" className="flex flex-wrap items-end gap-3">
+        <form method="get" className="flex flex-wrap items-end gap-2.5">
           <div>
             <label htmlFor="d-de" className="label">De</label>
-            <input id="d-de" type="month" name="de" defaultValue={monthKey(fromMonth)} className="input w-40" />
+            <input id="d-de" type="month" name="de" defaultValue={monthKey(fromMonth)} className="input w-[150px]" />
           </div>
           <div>
             <label htmlFor="d-ate" className="label">Até</label>
-            <input id="d-ate" type="month" name="ate" defaultValue={monthKey(toMonth)} className="input w-40" />
+            <input id="d-ate" type="month" name="ate" defaultValue={monthKey(toMonth)} className="input w-[150px]" />
           </div>
           {employees.length ? (
             <div>
@@ -97,19 +101,18 @@ export default async function DashboardPage(props: PageProps<"/">) {
       </header>
 
       {shortcuts.length ? (
-        <nav aria-label="Atalhos" className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <nav aria-label="Atalhos" className="mb-6 flex flex-wrap items-center gap-2">
+          <span className="eyebrow mr-2">Atalhos</span>
           {shortcuts.map((s) => (
-            <Link key={s.href} href={s.href} className="group flex items-center gap-3 rounded-xl border border-line bg-surface p-4 shadow-sm transition hover:border-primary/40 hover:shadow-md">
-              <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary transition group-hover:bg-primary group-hover:text-white">
-                <s.icon className="size-5" aria-hidden />
-              </span>
-              <span className="text-sm font-medium">{s.label}</span>
+            <Link key={s.href} href={s.href} className="group inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface py-1.5 pr-3.5 pl-2.5 text-[13.5px] font-medium transition-colors hover:border-ink hover:bg-ink hover:text-white">
+              <s.icon className="size-4 text-subtle transition-colors group-hover:text-white" strokeWidth={1.75} aria-hidden />
+              {s.label}
             </Link>
           ))}
         </nav>
       ) : null}
 
-      <section aria-label="Indicadores" className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <section aria-label="Indicadores" className="stat-strip mb-6 grid-cols-2 lg:grid-cols-5">
         {data.activeEmployees !== null ? (
           <Stat label="Colaboradores ativos" value={data.activeEmployees} hint={`${data.totalEmployees} cadastrados`} href="/colaboradores" />
         ) : null}
@@ -158,14 +161,14 @@ export default async function DashboardPage(props: PageProps<"/">) {
 
         <Panel title="Precisa de atenção" actions={attention ? <Badge tone="warn">{attention}</Badge> : undefined}>
           {attention === 0 ? (
-            <div className="flex items-center gap-3 rounded-lg bg-ok-soft p-4 text-sm text-ok">
+            <div className="flex items-center gap-3 rounded-r-lg border-l-2 border-ok bg-ok-soft p-4 text-sm text-ok">
               <ClipboardList className="size-5" aria-hidden /> Nada pendente no momento.
             </div>
           ) : (
             <ul className="flex flex-col divide-y divide-line">
               {data.metrics?.missingLastWeek.length ? (
                 <li className="flex items-start gap-3 py-3 first:pt-0">
-                  <LineChart className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+                  <LineChart className="mt-0.5 size-4 shrink-0 text-subtle" aria-hidden />
                   <span className="text-sm">
                     <Link href={`/desempenho/lancar?semana=${toDateKey(lastWeek)}`} className="link">
                       {data.metrics.missingLastWeek.length} colaborador(es) sem métricas da semana passada
@@ -232,16 +235,16 @@ export default async function DashboardPage(props: PageProps<"/">) {
                 action={can(actor, "meetings:write") ? <Link href="/reunioes/nova" className="btn btn-secondary btn-sm">Nova reunião</Link> : null}
               />
             ) : (
-              <ul className="flex flex-col gap-2">
+              <ul className="-my-2 flex flex-col divide-y divide-line">
                 {data.upcomingMeetings.map((m) => (
                   <li key={m.id}>
-                    <Link href={`/reunioes/${m.id}`} className="flex items-center gap-3 rounded-lg p-2 transition hover:bg-surface-2">
-                      <span className="grid w-12 shrink-0 place-items-center rounded-lg bg-primary-soft py-1.5 text-primary">
-                        <span className="text-lg font-semibold leading-none">{String(m.date.getUTCDate()).padStart(2, "0")}</span>
-                        <span className="text-[10px] font-medium">{formatMonth(m.date).split("/")[0]}</span>
+                    <Link href={`/reunioes/${m.id}`} className="group flex items-center gap-4 py-3">
+                      <span className="flex w-11 shrink-0 flex-col items-center">
+                        <span className="num text-[30px] transition-colors group-hover:text-primary">{String(m.date.getUTCDate()).padStart(2, "0")}</span>
+                        <span className="eyebrow mt-1 text-[10px]">{formatMonth(m.date).split("/")[0]}</span>
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{m.title}</span>
+                        <span className="block truncate text-[14.5px] font-medium group-hover:underline group-hover:decoration-line-strong group-hover:underline-offset-4">{m.title}</span>
                         <span className="block text-xs text-subtle">{formatTime(m.startMinute)} · {agendaStats(m.agenda).items} item(ns) de pauta</span>
                       </span>
                     </Link>

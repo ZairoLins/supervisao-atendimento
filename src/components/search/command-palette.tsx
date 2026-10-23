@@ -127,7 +127,7 @@ export function CommandPalette() {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(true)}
-        className="flex w-full max-w-xl items-center gap-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-left text-sm text-subtle transition-colors hover:border-line-strong hover:bg-surface"
+        className="flex w-full max-w-xl items-center gap-2.5 rounded-full border border-line bg-surface px-3.5 py-1.5 text-left text-[13.5px] text-subtle transition-colors hover:border-line-strong"
         aria-haspopup="dialog"
       >
         <Search className="size-4 shrink-0" aria-hidden />
@@ -143,8 +143,8 @@ export function CommandPalette() {
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center px-3 pt-[8vh] sm:px-6" role="presentation">
-          <button type="button" aria-label="Fechar pesquisa" tabIndex={-1} className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={close} />
-          <div role="dialog" aria-modal="true" aria-label="Pesquisa global" className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl" onKeyDown={onKeyDown}>
+          <button type="button" aria-label="Fechar pesquisa" tabIndex={-1} className="absolute inset-0 bg-ink/25 backdrop-blur-[2px]" onClick={close} />
+          <div role="dialog" aria-modal="true" aria-label="Pesquisa global" className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-[14px] border border-line bg-surface shadow-[0_24px_60px_-12px_rgba(18,18,18,0.25)]" onKeyDown={onKeyDown}>
             <div className="flex items-center gap-3 border-b border-line px-5 py-4">
               {status === "loading" ? <LoaderCircle className="size-4 shrink-0 animate-spin text-subtle" aria-hidden /> : <Search className="size-4 shrink-0 text-subtle" aria-hidden />}
               <input
