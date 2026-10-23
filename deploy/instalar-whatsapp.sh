@@ -58,7 +58,7 @@ LANGUAGE=pt-BR
 LOG_LEVEL=ERROR,WARN
 LOG_COLOR=false
 TELEMETRY_ENABLED=false
-CORS_ORIGIN=http://127.0.0.1
+CORS_ORIGIN=*
 CONFIG_SESSION_PHONE_CLIENT=Supervisao
 CONFIG_SESSION_PHONE_NAME=Chrome
 QRCODE_LIMIT=10
@@ -90,6 +90,9 @@ EOF
 else
   ok "Usando segredos existentes em $EVO_ENV"
 fi
+# A API só ouve em 127.0.0.1 e exige a chave; uma lista de origens restrita faz a Evolution
+# recusar chamadas sem cabeçalho Origin (como as do servidor) com "Not allowed by CORS".
+sed -i 's|^CORS_ORIGIN=.*|CORS_ORIGIN=*|' "$EVO_ENV"
 KEY=$(grep '^AUTHENTICATION_API_KEY=' "$EVO_ENV" | cut -d= -f2-)
 
 # 3. Containers
