@@ -173,8 +173,8 @@ export async function sendMeetingAgendaToManager(db: Db, actor: Actor, meetingId
 export function meetingReminderText(m: { title: string; date: Date; startMinute: number; endMinute: number | null; location: string | null; agenda: string }) {
   const lines = ["📣 *Lembrete de reunião*", "", `*${m.title}*`, `🗓 ${meetingWhen(m)}`];
   if (m.location) lines.push(`📍 ${m.location}`);
-  if (m.agenda.trim()) lines.push("", "*Pauta*", markdownToWhatsApp(m.agenda));
-  lines.push("", "Contamos com a presença de todos!");
+  if (m.agenda.trim()) lines.push("", "*Pauta:*", "", markdownToWhatsApp(m.agenda));
+  lines.push("", "Conto com a presença de todos!");
   return lines.join("\n");
 }
 

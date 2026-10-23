@@ -118,7 +118,8 @@ describe.skipIf(!hasTestDb)("WhatsApp", () => {
     expect(sender.sent).toHaveLength(1);
     expect(sender.sent[0].to).toBe("120363000000000001@g.us");
     expect(sender.sent[0].text).toContain("Lembrete de reunião");
-    expect(sender.sent[0].text).toContain("☐ Avisos");
+    expect(sender.sent[0].text).toContain("*Pauta:*\n\n☐ Avisos");
+    expect(sender.sent[0].text).toContain("Conto com a presença de todos!");
     const msg = await testDb().outboundMessage.findFirstOrThrow();
     expect(msg).toMatchObject({ automatic: true, sentById: null, entityId: weekly.id });
 
