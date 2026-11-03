@@ -9,7 +9,7 @@ import { addDays, formatDateTime, monthKey } from "@/lib/dates";
 import { formatCode } from "@/lib/text";
 import { readParams } from "@/lib/validation";
 import { getMetric, weekLabel } from "@/modules/metrics/service";
-import { correctMetricAction } from "@/modules/metrics/actions";
+import { correctMetricAction, deleteMetricAction } from "@/modules/metrics/actions";
 import { ActionForm, FormMessage, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
 import { DescriptionList, Notice, PageHeader, Panel } from "@/components/ui/primitives";
 
@@ -73,18 +73,26 @@ export default async function MetricPage(props: PageProps<"/desempenho/[id]">) {
           </Panel>
         </div>
         {can(actor, "metrics:write") ? (
-          <Panel title="Corrigir lançamento" description="Os valores atuais serão guardados no histórico antes da alteração.">
-            <ActionForm action={correctMetricAction.bind(null, m.id)} className="flex flex-col gap-5">
-              <TextField name="ticketsHandled" label="Chamados atendidos" type="number" required min={0} defaultValue={m.ticketsHandled} />
-              <TextField name="avgHandleMinutes" label="Tempo médio (min)" type="number" step="0.01" min={0} required defaultValue={Number(m.avgHandleMinutes)} />
-              <TextField name="avgRating" label="Avaliação média (0 a 10)" type="number" step="0.01" min={0} max={10} defaultValue={m.ratingCount === 0 ? null : Number(m.avgRating)} hint="Pode ficar em branco quando não houve avaliações." />
-              <TextField name="ratingCount" label="Quantidade de avaliações" type="number" step="1" min={0} required defaultValue={m.ratingCount} />
-              <TextAreaField name="notes" label="Observações" rows={3} defaultValue={m.notes} maxLength={2000} />
-              <TextAreaField name="reason" label="Motivo da correção" required rows={2} maxLength={500} />
-              <SubmitButton>Registrar correção</SubmitButton>
-              <FormMessage />
-            </ActionForm>
-          </Panel>
+          <div className="flex flex-col gap-5">
+            <Panel title="Editar lançamento" description="Os valores atuais serão guardados no histórico antes da alteração.">
+              <ActionForm action={correctMetricAction.bind(null, m.id)} className="flex flex-col gap-5">
+                <TextField name="ticketsHandled" label="Chamados atendidos" type="number" required min={0} defaultValue={m.ticketsHandled} />
+                <TextField name="avgHandleMinutes" label="Tempo médio (min)" type="number" step="0.01" min={0} required defaultValue={Number(m.avgHandleMinutes)} />
+                <TextField name="avgRating" label="Avaliação média (0 a 10)" type="number" step="0.01" min={0} max={10} defaultValue={m.ratingCount === 0 ? null : Number(m.avgRating)} hint="Pode ficar em branco quando não houve avaliações." />
+                <TextField name="ratingCount" label="Quantidade de avaliações" type="number" step="1" min={0} required defaultValue={m.ratingCount} />
+                <TextAreaField name="notes" label="Observações" rows={3} defaultValue={m.notes} maxLength={1000} />
+                <TextAreaField name="reason" label="Motivo da alteração (opcional)" rows={2} maxLength={500} />
+                <SubmitButton>Salvar alterações</SubmitButton>
+                <FormMessage />
+              </ActionForm>
+            </Panel>
+            <Panel title="Excluir lançamento" description="Use quando o lançamento foi feito por engano (colaborador ou semana errados). Os valores ficam registrados na auditoria.">
+              <ActionForm action={deleteMetricAction.bind(null, m.id, true)} className="flex flex-col gap-3">
+                <SubmitButton variant="danger" className="btn-sm self-start" confirm={`Excluir o lançamento de ${m.employee.fullName} da semana ${weekLabel(m.weekStart)}?`}>Excluir lançamento</SubmitButton>
+                <FormMessage />
+              </ActionForm>
+            </Panel>
+          </div>
         ) : null}
       </div>
     </>

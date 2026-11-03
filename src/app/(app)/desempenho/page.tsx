@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FileDown, LineChart, Plus } from "lucide-react";
+import { FileDown, LineChart, Pencil, Plus, Trash2 } from "lucide-react";
 import { db } from "@/lib/db";
 import { requirePermission } from "@/lib/auth/dal";
 import { can } from "@/lib/permissions";
@@ -8,8 +8,10 @@ import { today } from "@/lib/page";
 import { addMonths, endOfMonth, formatDate, formatMonth, formatMonthLong, monthKey, parseMonthKey, startOfMonth, toDateKey } from "@/lib/dates";
 import { pickEnum, readParams, safeDateParam } from "@/lib/validation";
 import { listMetrics, metricSeries, pctChange, peerComparison, periodAggregate, weekLabel, weekStartOf, weeklySeries } from "@/modules/metrics/service";
+import { deleteMetricAction } from "@/modules/metrics/actions";
+import { ActionForm, FormMessage, SubmitButton } from "@/components/ui/form";
 import { distinctTeamsAndTitles, employeeOptions } from "@/modules/employees/service";
-import { EmptyState, PageHeader, Pagination, Panel, Stat, buildHref } from "@/components/ui/primitives";
+import { EmptyState, Notice, PageHeader, Pagination, Panel, Stat, buildHref } from "@/components/ui/primitives";
 import { MetricTrend } from "@/components/charts/metric-trend";
 
 export const metadata: Metadata = { title: "Desempenho" };
@@ -55,6 +57,7 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
     peerComparison(db, actor, { month, team: params.team, jobTitle: params.funcao }),
     listMetrics(db, actor, { employeeId, team: params.team, from: startOfMonth(month), to: endOfMonth(month), page: Number(params.page) || 1 }),
   ]);
+  const canWrite = can(actor, "metrics:write");
   const selectedName = employees.find((e) => e.value === employeeId)?.label;
   const scopeLabel = selectedName ?? (params.team || params.funcao ? [params.team, params.funcao].filter(Boolean).join(" · ") : "Toda a equipe");
   const monthlyData = monthly.map((s, i) => ({ ...s, compareTickets: null, compareAht: teamMonthly?.[i]?.aht ?? null, compareRating: teamMonthly?.[i]?.rating ?? null }));
@@ -68,6 +71,8 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
         description="Lançamentos feitos semana a semana (a semana conta no mês da sua sexta-feira). Volume maior não significa, por si só, melhor desempenho."
         actions={can(actor, "metrics:write") ? <Link href="/desempenho/lancar" className="btn btn-primary"><Plus className="size-4" aria-hidden /> Lançar métricas da semana</Link> : null}
       />
+
+      {params.excluido ? <div className="mb-5"><Notice tone="ok">Lançamento excluído.</Notice></div> : null}
 
       <form method="get" className="panel-tight mb-5 flex flex-wrap items-end gap-3">
         <div>
@@ -211,7 +216,7 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
               <div className="table-wrap">
                 <table className="table">
                   <thead>
-                    <tr><th>Semana</th><th>Colaborador</th><th className="text-right">Chamados</th><th className="text-right">TMA (min)</th><th className="text-right">Avaliação</th><th>Histórico</th></tr>
+                    <tr><th>Semana</th><th>Colaborador</th><th className="text-right">Chamados</th><th className="text-right">TMA (min)</th><th className="text-right">Avaliação</th><th>Histórico</th>{canWrite ? <th className="text-right">Ações</th> : null}</tr>
                   </thead>
                   <tbody>
                     {list.items.map((m) => (
@@ -222,6 +227,19 @@ export default async function PerformancePage(props: PageProps<"/desempenho">) {
                         <td className="text-right tabular-nums">{fmt(Number(m.avgHandleMinutes))}</td>
                         <td className="text-right tabular-nums">{m.ratingCount === 0 ? "—" : fmt(Number(m.avgRating))}{m.ratingCount !== null ? <span className="block text-[11px] text-subtle">{m.ratingCount} aval.</span> : null}</td>
                         <td className="text-xs text-subtle">{m._count.revisions ? `${m._count.revisions} correção(ões)` : "Original"}</td>
+                        {canWrite ? (
+                          <td>
+                            <div className="flex items-center justify-end gap-1">
+                              <Link href={`/desempenho/${m.id}`} className="btn btn-ghost btn-sm" title="Editar lançamento"><Pencil className="size-3.5" aria-hidden /> Editar</Link>
+                              <ActionForm action={deleteMetricAction.bind(null, m.id, false)}>
+                                <SubmitButton variant="ghost" className="btn-sm text-danger" confirm={`Excluir o lançamento de ${m.employee.fullName} da semana ${weekLabel(m.weekStart)}?`}>
+                                  <Trash2 className="size-3.5" aria-hidden /> Excluir
+                                </SubmitButton>
+                                <FormMessage />
+                              </ActionForm>
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     ))}
                   </tbody>

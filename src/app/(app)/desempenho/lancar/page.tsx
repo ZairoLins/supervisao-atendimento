@@ -96,6 +96,7 @@ export default async function WeeklyMetricsPage(props: PageProps<"/desempenho/la
                         <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-subtle">
                           {e.team}
                           {m ? <Badge tone="ok" icon={false}>Lançado</Badge> : null}
+                          {m ? <Link href={`/desempenho/${m.id}`} className="link-accent">Editar / excluir</Link> : null}
                         </p>
                       </td>
                       <td><BatchInput name={`t_${e.id}`} label={`Chamados de ${e.fullName}`} defaultValue={m?.ticketsHandled} step="1" min={0} /></td>

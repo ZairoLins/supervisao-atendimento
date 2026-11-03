@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { AppError } from "@/lib/errors";
 import { parseDateKey } from "@/lib/dates";
 import { createEmployee, inactivateEmployee, listEmployees, reactivateEmployee, updateEmployee } from "@/modules/employees/service";
-import { combine, correctMetric, createMetric, fridayOf, getMetric, metricSeries, metricsReportData, saveWeeklyBatch, weekStartOf, weeklySeries } from "@/modules/metrics/service";
+import { combine, correctMetric, createMetric, deleteMetric, fridayOf, getMetric, metricSeries, metricsReportData, saveWeeklyBatch, weekStartOf, weeklySeries } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback } from "@/modules/feedbacks/service";
 import { createUser, disconnect, hasTestDb, resetDb, testDb } from "../support/db";
@@ -149,7 +149,7 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     await expect(saveWeeklyBatch(testDb(), sup, { week: "2026-10-12" }, TODAY)).rejects.toThrow(/ao menos um/);
   });
 
-  it("correção preserva valores originais em revisões, com motivo", async () => {
+  it("correção preserva valores originais em revisões; motivo é opcional", async () => {
     const sup = await createUser();
     const e = await makeEmployee(sup);
     const m = await createMetric(testDb(), sup, base(e.id), TODAY);
@@ -160,7 +160,25 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     expect(full.revisions).toHaveLength(2);
     expect(full.revisions[full.revisions.length - 1].ticketsHandled).toBe(320);
     await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "331", avgHandleMinutes: "6.4", avgRating: "8.8", ratingCount: "331", reason: "x" })).rejects.toThrow(/Nenhum valor/);
-    await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "1", avgHandleMinutes: "1", avgRating: "1", ratingCount: "1" })).rejects.toBeInstanceOf(ZodError);
+    await correctMetric(testDb(), sup, m.id, { ticketsHandled: "1", avgHandleMinutes: "1", avgRating: "1", ratingCount: "1" });
+    const edited = await getMetric(testDb(), sup, m.id);
+    expect(edited.ticketsHandled).toBe(1);
+    expect(edited.revisions[0].reason).toBe("Edição do lançamento");
+    await expect(correctMetric(testDb(), sup, m.id, { ticketsHandled: "-1", avgHandleMinutes: "1", avgRating: "1", ratingCount: "1" })).rejects.toBeInstanceOf(ZodError);
+  });
+
+  it("exclusão remove o lançamento e o histórico, registrando na auditoria", async () => {
+    const sup = await createUser();
+    const e = await makeEmployee(sup);
+    const m = await createMetric(testDb(), sup, base(e.id), TODAY);
+    await correctMetric(testDb(), sup, m.id, { ticketsHandled: "330", avgHandleMinutes: "6.5", avgRating: "8.75", ratingCount: "330" });
+    await deleteMetric(testDb(), sup, m.id);
+    expect(await testDb().weeklyMetric.count({ where: { id: m.id } })).toBe(0);
+    expect(await testDb().weeklyMetricRevision.count({ where: { metricId: m.id } })).toBe(0);
+    expect(await testDb().auditLog.count({ where: { entityType: "WeeklyMetric", entityId: m.id, action: "DELETE" } })).toBe(1);
+    await expect(deleteMetric(testDb(), sup, m.id)).rejects.toThrow(/não encontrado/);
+    // Após excluir, a semana pode ser lançada de novo
+    await createMetric(testDb(), sup, base(e.id), TODAY);
   });
 
   it("semana conta no mês da sua sexta-feira; séries mensal e semanal", async () => {

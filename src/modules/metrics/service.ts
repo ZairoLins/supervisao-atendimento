@@ -7,7 +7,7 @@ import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { assertCan, type Actor } from "@/lib/permissions";
 import { isUniqueViolation } from "@/lib/prisma-errors";
 import { formatCode } from "@/lib/text";
-import { dateField, decimalField, intField, optionalText, PAGE_SIZE, requiredText, uuidField } from "@/lib/validation";
+import { dateField, decimalField, intField, optionalText, PAGE_SIZE, uuidField } from "@/lib/validation";
 
 /**
  * Indicadores lançados por semana (segunda a domingo), tipicamente às sextas-feiras.
@@ -186,9 +186,9 @@ export async function saveWeeklyBatch(db: Db, actor: Actor, raw: Record<string, 
   });
 }
 
-const correctionSchema = z.object({ ...values, reason: requiredText("o motivo da correção", 500) });
+const correctionSchema = z.object({ ...values, reason: optionalText(500) });
 
-/** Corrige um lançamento guardando os valores anteriores em WeeklyMetricRevision. */
+/** Edita um lançamento guardando os valores anteriores em WeeklyMetricRevision (o motivo é opcional). */
 export async function correctMetric(db: Db, actor: Actor, id: string, raw: unknown) {
   assertCan(actor, "metrics:write");
   const v = correctionSchema.parse(withoutRatingWhenNone(raw as Record<string, unknown>));
@@ -202,15 +202,32 @@ export async function correctMetric(db: Db, actor: Actor, id: string, raw: unkno
       before.ratingCount === v.ratingCount &&
       (before.notes ?? null) === (v.notes ?? null);
     if (unchanged) throw new ValidationError("Nenhum valor foi alterado.");
+    const reason = v.reason ?? "Edição do lançamento";
     await tx.weeklyMetricRevision.create({
-      data: { metricId: id, ticketsHandled: before.ticketsHandled, avgHandleMinutes: before.avgHandleMinutes, avgRating: before.avgRating, ratingCount: before.ratingCount, notes: before.notes, reason: v.reason, changedById: actor.id },
+      data: { metricId: id, ticketsHandled: before.ticketsHandled, avgHandleMinutes: before.avgHandleMinutes, avgRating: before.avgRating, ratingCount: before.ratingCount, notes: before.notes, reason, changedById: actor.id },
     });
     const after = await tx.weeklyMetric.update({
       where: { id },
       data: { ticketsHandled: v.ticketsHandled, avgHandleMinutes: v.avgHandleMinutes, avgRating: v.avgRating, ratingCount: v.ratingCount, notes: v.notes ?? null },
     });
-    await audit(tx, { actorId: actor.id, action: "CORRECT", entityType: "WeeklyMetric", entityId: id, summary: `Métricas da semana ${weekLabel(before.weekStart)} corrigidas`, before, after, reason: v.reason });
+    await audit(tx, { actorId: actor.id, action: "CORRECT", entityType: "WeeklyMetric", entityId: id, summary: `Métricas da semana ${weekLabel(before.weekStart)} corrigidas`, before, after, reason });
     return after;
+  });
+}
+
+/**
+ * Exclui um lançamento (e o histórico de correções dele). Os valores excluídos ficam
+ * registrados na auditoria. Use para lançamentos feitos por engano.
+ */
+export async function deleteMetric(db: Db, actor: Actor, id: string) {
+  assertCan(actor, "metrics:write");
+  return db.$transaction(async (tx) => {
+    const before = await tx.weeklyMetric.findUnique({ where: { id }, include: { employee: { select: { code: true } } } });
+    if (!before) throw new NotFoundError("Lançamento não encontrado.");
+    const { employee, ...record } = before;
+    await tx.weeklyMetric.delete({ where: { id } });
+    await audit(tx, { actorId: actor.id, action: "DELETE", entityType: "WeeklyMetric", entityId: id, summary: `Métricas da semana ${weekLabel(before.weekStart)} de ${formatCode("employee", employee.code)} excluídas`, before: record });
+    return { employeeId: before.employeeId, weekStart: before.weekStart };
   });
 }
 

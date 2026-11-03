@@ -2,7 +2,8 @@
 
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
-import { correctMetric, saveWeeklyBatch } from "./service";
+import { monthKey, addDays } from "@/lib/dates";
+import { correctMetric, deleteMetric, saveWeeklyBatch } from "./service";
 
 export async function saveWeeklyBatchAction(_: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
@@ -15,6 +16,18 @@ export async function saveWeeklyBatchAction(_: ActionState, fd: FormData) {
 export async function correctMetricAction(id: string, _: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
     await correctMetric(db, actor, id, formToObject(fd));
-    return { message: "Correção registrada. O valor anterior foi preservado no histórico.", revalidate: ["/desempenho", "/"] };
+    return { message: "Lançamento atualizado. O valor anterior foi preservado no histórico.", revalidate: ["/desempenho", "/"] };
+  });
+}
+
+/** Exclui o lançamento. Na página de detalhe (`goBack`), volta para o desempenho do mês. */
+export async function deleteMetricAction(id: string, goBack: boolean, _: ActionState, fd: FormData) {
+  return runAction(fd, async (actor) => {
+    const m = await deleteMetric(db, actor, id);
+    return {
+      message: "Lançamento excluído.",
+      redirectTo: goBack ? `/desempenho?mes=${monthKey(addDays(m.weekStart, 4))}&excluido=1` : undefined,
+      revalidate: ["/desempenho", "/"],
+    };
   });
 }
