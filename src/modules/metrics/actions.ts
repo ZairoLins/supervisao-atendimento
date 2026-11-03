@@ -3,7 +3,7 @@
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
 import { monthKey, addDays } from "@/lib/dates";
-import { correctMetric, deleteMetric, saveWeeklyBatch } from "./service";
+import { correctMetric, deleteMetric, deleteWeekMetrics, saveWeeklyBatch, weekLabel } from "./service";
 
 export async function saveWeeklyBatchAction(_: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
@@ -29,5 +29,12 @@ export async function deleteMetricAction(id: string, goBack: boolean, _: ActionS
       redirectTo: goBack ? `/desempenho?mes=${monthKey(addDays(m.weekStart, 4))}&excluido=1` : undefined,
       revalidate: ["/desempenho", "/"],
     };
+  });
+}
+
+export async function deleteWeekMetricsAction(_: ActionState, fd: FormData) {
+  return runAction(fd, async (actor) => {
+    const r = await deleteWeekMetrics(db, actor, formToObject(fd));
+    return { message: `${r.deleted} lançamento(s) da semana ${weekLabel(r.weekStart)} excluído(s).`, revalidate: ["/desempenho", "/"] };
   });
 }

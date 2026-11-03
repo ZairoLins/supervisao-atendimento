@@ -231,6 +231,25 @@ export async function deleteMetric(db: Db, actor: Actor, id: string) {
   });
 }
 
+/**
+ * Exclui todos os lançamentos de uma semana (de todos os colaboradores), com o histórico
+ * de correções. Cada lançamento excluído fica registrado na auditoria.
+ */
+export async function deleteWeekMetrics(db: Db, actor: Actor, raw: unknown) {
+  assertCan(actor, "metrics:write");
+  const { week } = z.object({ week: dateField("a semana") }).parse(raw);
+  const weekStart = weekStartOf(week);
+  return db.$transaction(async (tx) => {
+    const rows = await tx.weeklyMetric.findMany({ where: { weekStart }, include: { employee: { select: { code: true } } } });
+    if (rows.length === 0) throw new NotFoundError(`Não há lançamentos na semana ${weekLabel(weekStart)}.`);
+    await tx.weeklyMetric.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+    for (const { employee, ...record } of rows) {
+      await audit(tx, { actorId: actor.id, action: "DELETE", entityType: "WeeklyMetric", entityId: record.id, summary: `Métricas da semana ${weekLabel(weekStart)} de ${formatCode("employee", employee.code)} excluídas (exclusão da semana inteira)`, before: record });
+    }
+    return { deleted: rows.length, weekStart };
+  });
+}
+
 export async function getMetric(db: Db, actor: Actor, id: string) {
   assertCan(actor, "metrics:read");
   const m = await db.weeklyMetric.findUnique({

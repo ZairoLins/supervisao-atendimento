@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { AppError } from "@/lib/errors";
 import { parseDateKey } from "@/lib/dates";
 import { createEmployee, inactivateEmployee, listEmployees, reactivateEmployee, updateEmployee } from "@/modules/employees/service";
-import { combine, correctMetric, createMetric, deleteMetric, fridayOf, getMetric, metricSeries, metricsReportData, saveWeeklyBatch, weekStartOf, weeklySeries } from "@/modules/metrics/service";
+import { combine, correctMetric, createMetric, deleteMetric, deleteWeekMetrics, fridayOf, getMetric, metricSeries, metricsReportData, saveWeeklyBatch, weekStartOf, weeklySeries } from "@/modules/metrics/service";
 import { createOccurrence } from "@/modules/attendance/occurrences";
 import { createFeedback } from "@/modules/feedbacks/service";
 import { createUser, disconnect, hasTestDb, resetDb, testDb } from "../support/db";
@@ -179,6 +179,21 @@ describe.skipIf(!hasTestDb)("métricas semanais", () => {
     await expect(deleteMetric(testDb(), sup, m.id)).rejects.toThrow(/não encontrado/);
     // Após excluir, a semana pode ser lançada de novo
     await createMetric(testDb(), sup, base(e.id), TODAY);
+  });
+
+  it("exclusão da semana inteira remove só os lançamentos daquela semana", async () => {
+    const sup = await createUser();
+    const a = await makeEmployee(sup);
+    const b = await makeEmployee(sup);
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-03", ticketsHandled: "10", avgHandleMinutes: "5", avgRating: "8", ratingCount: "10" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: b.id, week: "2026-08-05", ticketsHandled: "20", avgHandleMinutes: "5", avgRating: "8", ratingCount: "20" }, TODAY);
+    await createMetric(testDb(), sup, { employeeId: a.id, week: "2026-08-10", ticketsHandled: "30", avgHandleMinutes: "5", avgRating: "8", ratingCount: "30" }, TODAY);
+    const r = await deleteWeekMetrics(testDb(), sup, { week: "2026-08-07" });
+    expect(r.deleted).toBe(2);
+    expect(await testDb().weeklyMetric.count({ where: { weekStart: parseDateKey("2026-08-03") } })).toBe(0);
+    expect(await testDb().weeklyMetric.count({ where: { weekStart: parseDateKey("2026-08-10") } })).toBe(1);
+    expect(await testDb().auditLog.count({ where: { entityType: "WeeklyMetric", action: "DELETE" } })).toBe(2);
+    await expect(deleteWeekMetrics(testDb(), sup, { week: "2026-08-03" })).rejects.toThrow(/Não há lançamentos/);
   });
 
   it("semana conta no mês da sua sexta-feira; séries mensal e semanal", async () => {

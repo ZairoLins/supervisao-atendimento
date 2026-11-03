@@ -8,7 +8,7 @@ import { today } from "@/lib/page";
 import { addDays, dayNumber, formatDate, toDateKey } from "@/lib/dates";
 import { readParams, safeDateParam } from "@/lib/validation";
 import { weekLabel, weekStartOf, weeklyBatchData } from "@/modules/metrics/service";
-import { saveWeeklyBatchAction } from "@/modules/metrics/actions";
+import { deleteWeekMetricsAction, saveWeeklyBatchAction } from "@/modules/metrics/actions";
 import { ActionForm, FormMessage, Hidden, SubmitButton } from "@/components/ui/form";
 import { Badge, EmptyState, PageHeader, Panel } from "@/components/ui/primitives";
 import { BatchInput } from "./batch-input";
@@ -119,6 +119,18 @@ export default async function WeeklyMetricsPage(props: PageProps<"/desempenho/la
           </ActionForm>
         )}
       </Panel>
+
+      {filled > 0 ? (
+        <div className="mt-5">
+          <Panel title="Excluir a semana inteira" description={`Remove os ${filled} lançamento(s) da semana ${weekLabel(weekStart)} de todos os colaboradores, com o histórico de correções. Os valores ficam registrados na auditoria.`}>
+            <ActionForm action={deleteWeekMetricsAction} className="flex flex-wrap items-center gap-3">
+              <Hidden name="week" value={key} />
+              <SubmitButton variant="danger" className="btn-sm" confirm={`Excluir TODOS os ${filled} lançamento(s) da semana ${weekLabel(weekStart)}? Esta ação não pode ser desfeita.`}>Excluir todas as métricas da semana</SubmitButton>
+              <FormMessage />
+            </ActionForm>
+          </Panel>
+        </div>
+      ) : null}
     </>
   );
 }
