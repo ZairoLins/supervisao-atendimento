@@ -8,6 +8,7 @@ import { createOccurrence } from "@/modules/attendance/occurrences";
 import type { WhatsAppDocument, WhatsAppSender } from "@/modules/whatsapp/client";
 import { WhatsAppError } from "@/modules/whatsapp/client";
 import {
+  deliveryMessage,
   listMessages,
   listTemplates,
   resetTemplate,
@@ -47,7 +48,7 @@ function fakeSender(fail = false): WhatsAppSender & { sent: Sent[] } {
   };
 }
 
-const settings = { managerName: "Marta", managerPhone: "(11) 98888-7777", groupName: "Suporte Interno", groupJid: "120363000000000001@g.us", reminderEnabled: "on", reminderHoursBefore: "2" };
+const settings = { managerName: "Marta", managerPhone: "(11) 98888-7777", groups: ["120363000000000001@g.us|Suporte Interno"], reminderEnabled: "on", reminderHoursBefore: "2" };
 
 describe.skipIf(!hasTestDb)("WhatsApp", () => {
   beforeEach(resetDb);
@@ -56,8 +57,10 @@ describe.skipIf(!hasTestDb)("WhatsApp", () => {
   it("valida destinatários e exige o grupo para o aviso automático", async () => {
     const sup = await createUser();
     await expect(saveNotificationSettings(testDb(), sup, { ...settings, managerPhone: "123" })).rejects.toThrow(/telefone/);
-    await expect(saveNotificationSettings(testDb(), sup, { ...settings, groupJid: "" })).rejects.toThrow(/grupo/);
-    await expect(saveNotificationSettings(testDb(), sup, { ...settings, groupJid: "abc@s.whatsapp.net" })).rejects.toThrow();
+    await expect(saveNotificationSettings(testDb(), sup, { ...settings, groups: [] })).rejects.toThrow(/grupo/);
+    await expect(saveNotificationSettings(testDb(), sup, { ...settings, groups: ["abc@s.whatsapp.net|X"] })).rejects.toThrow();
+    const six = Array.from({ length: 6 }, (_, i) => `12036300000000000${i}@g.us|G${i}`);
+    await expect(saveNotificationSettings(testDb(), sup, { ...settings, groups: six })).rejects.toThrow(/até 5/);
     const s = await saveNotificationSettings(testDb(), sup, settings);
     expect(s.managerPhone).toBe("5511988887777");
     const assistant = await createUser("ASSISTANT");
@@ -108,6 +111,38 @@ describe.skipIf(!hasTestDb)("WhatsApp", () => {
     const [msg] = (await listMessages(testDb(), sup)).items;
     expect(msg).toMatchObject({ status: "FAILED", target: "GROUP", destination: "Suporte Interno" });
     expect((await testDb().meeting.findUniqueOrThrow({ where: { id: m.id } })).reminderSentAt).toBeNull();
+  });
+
+  it("envia o aviso para todos os grupos escolhidos e tolera falha em um deles", async () => {
+    const sup = await createUser();
+    const s = await saveNotificationSettings(testDb(), sup, { ...settings, groups: ["120363000000000001@g.us|Suporte Interno", "120363000000000002@g.us|Atendimento N2", "120363000000000001@g.us|Duplicado"] });
+    expect(s.groupJids).toEqual(["120363000000000001@g.us", "120363000000000002@g.us"]);
+    expect(s.groupNames).toEqual(["Suporte Interno", "Atendimento N2"]);
+    const m = await createMeeting(testDb(), sup, { title: "Semanal", type: "WEEKLY", date: "2026-10-26", startTime: "09:00" });
+
+    const sender = fakeSender();
+    const r = await sendMeetingReminderToGroup(testDb(), sup, m.id, sender);
+    expect(sender.sent.map((x) => x.to)).toEqual(["120363000000000001@g.us", "120363000000000002@g.us"]);
+    expect(r.destinationLabel).toBe("Suporte Interno, Atendimento N2");
+
+    // Falha só no segundo grupo: o primeiro recebe, a falha fica registrada e o aviso conta como enviado
+    const partial: WhatsAppSender & { sent: Sent[] } = {
+      ...fakeSender(),
+      sent: [],
+      async sendText(to, text) {
+        if (to.endsWith("2@g.us")) throw new WhatsAppError("O WhatsApp recusou o envio: grupo não encontrado.");
+        partial.sent.push({ to, text });
+      },
+    };
+    const m2 = await createMeeting(testDb(), sup, { title: "Outra", type: "WEEKLY", date: "2026-10-27", startTime: "09:00" });
+    const r2 = await sendMeetingReminderToGroup(testDb(), sup, m2.id, partial);
+    expect(r2.failed).toEqual([{ label: "Atendimento N2", error: "O WhatsApp recusou o envio: grupo não encontrado." }]);
+    expect(deliveryMessage("Aviso enviado para", r2)).toBe("Aviso enviado para Suporte Interno. Não foi entregue em: Atendimento N2 (O WhatsApp recusou o envio: grupo não encontrado.)");
+    expect((await testDb().meeting.findUniqueOrThrow({ where: { id: m2.id } })).reminderSentAt).not.toBeNull();
+    expect(await testDb().outboundMessage.count({ where: { entityId: m2.id, status: "FAILED" } })).toBe(1);
+
+    // Nenhum grupo recebeu: erro
+    await expect(sendMeetingReminderToGroup(testDb(), sup, m.id, fakeSender(true))).rejects.toThrow(/inexistente/);
   });
 
   it("cancela a reunião com motivo e avisa o grupo; o lembrete deixa de valer", async () => {

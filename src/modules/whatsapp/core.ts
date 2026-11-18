@@ -41,8 +41,8 @@ export async function getNotificationSettings(db: Db) {
     id: SINGLETON,
     managerName: null,
     managerPhone: null,
-    groupName: null,
-    groupJid: null,
+    groupJids: [] as string[],
+    groupNames: [] as string[],
     reminderEnabled: false,
     reminderHoursBefore: 2,
     updatedById: null,
@@ -62,14 +62,31 @@ export function maskPhone(phone: string): string {
   return phone.length > 6 ? `+${phone.slice(0, 4)} ••••${phone.slice(-4)}` : "••••";
 }
 
+export const MAX_GROUPS = 5;
+const GROUP_JID = /^[0-9]{5,30}(-[0-9]+)?@g\.us$/;
+
+/** Grupos marcados no formulário: cada valor é "jid|nome". */
+const groupsField = z.preprocess(
+  (v) => (Array.isArray(v) ? v : typeof v === "string" && v ? [v] : []),
+  z
+    .array(z.string().max(300))
+    .transform((items) => {
+      const seen = new Map<string, string>();
+      for (const item of items) {
+        const [jid, ...name] = item.split("|");
+        const id = jid.trim();
+        if (id && !seen.has(id)) seen.set(id, name.join("|").trim().slice(0, 120) || "Grupo");
+      }
+      return [...seen].map(([jid, name]) => ({ jid, name }));
+    })
+    .refine((groups) => groups.every((g) => GROUP_JID.test(g.jid)), "Identificador de grupo inválido (termina em @g.us).")
+    .refine((groups) => groups.length <= MAX_GROUPS, `Escolha até ${MAX_GROUPS} grupos.`),
+);
+
 const settingsSchema = z.object({
   managerName: optionalText(120),
   managerPhone: optionalText(30),
-  groupName: optionalText(120),
-  groupJid: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() ? v.trim() : undefined),
-    z.string().regex(/^[0-9]{5,30}(-[0-9]+)?@g\.us$/, "Identificador de grupo inválido (termina em @g.us).").optional(),
-  ),
+  groups: groupsField,
   reminderEnabled: z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean()),
   reminderHoursBefore: intField("a antecedência do aviso (horas)", 0, 72),
 });
@@ -79,12 +96,12 @@ export async function saveNotificationSettings(db: Db, actor: Actor, raw: unknow
   const v = settingsSchema.parse(raw);
   const managerPhone = v.managerPhone ? normalizePhone(v.managerPhone) : null;
   if (v.managerPhone && !managerPhone) throw new ValidationError("Revise o telefone do gestor.", { managerPhone: "Informe DDD e número, ex.: (11) 99999-8888." });
-  if (v.reminderEnabled && !v.groupJid) throw new ValidationError("Escolha o grupo antes de ativar o aviso automático.", { groupJid: "Obrigatório para o aviso automático." });
+  if (v.reminderEnabled && !v.groups.length) throw new ValidationError("Escolha ao menos um grupo antes de ativar o aviso automático.", { groups: "Obrigatório para o aviso automático." });
   const data = {
     managerName: v.managerName ?? null,
     managerPhone,
-    groupName: v.groupName ?? null,
-    groupJid: v.groupJid ?? null,
+    groupJids: v.groups.map((g) => g.jid),
+    groupNames: v.groups.map((g) => g.name),
     reminderEnabled: v.reminderEnabled,
     reminderHoursBefore: v.reminderHoursBefore,
     updatedById: actor.id,
@@ -95,14 +112,15 @@ export async function saveNotificationSettings(db: Db, actor: Actor, raw: unknow
   return after;
 }
 
-async function destination(db: Db, target: MessageTarget) {
+/** Destinos do envio: o gestor, ou todos os grupos escolhidos. */
+async function destinations(db: Db, target: MessageTarget): Promise<Array<{ to: string; label: string }>> {
   const s = await getNotificationSettings(db);
   if (target === "MANAGER") {
     if (!s.managerPhone) throw new WhatsAppError("Cadastre o número do gestor em WhatsApp › Destinatários.");
-    return { to: s.managerPhone, label: s.managerName ? `${s.managerName} (${maskPhone(s.managerPhone)})` : maskPhone(s.managerPhone) };
+    return [{ to: s.managerPhone, label: s.managerName ? `${s.managerName} (${maskPhone(s.managerPhone)})` : maskPhone(s.managerPhone) }];
   }
-  if (!s.groupJid) throw new WhatsAppError("Escolha o grupo do Suporte Interno em WhatsApp › Destinatários.");
-  return { to: s.groupJid, label: s.groupName ?? "Grupo" };
+  if (!s.groupJids.length) throw new WhatsAppError("Escolha os grupos em WhatsApp › Destinatários.");
+  return s.groupJids.map((to, i) => ({ to, label: s.groupNames[i] || "Grupo" }));
 }
 
 // ───────────── Entrega com registro ─────────────
@@ -117,21 +135,46 @@ type Delivery = {
   automatic?: boolean;
 };
 
-export async function deliver(db: Db, actorId: string | null, sender: WhatsAppSender, d: Delivery) {
-  const dest = await destination(db, d.target);
-  try {
-    if (d.document) await sender.sendDocument(dest.to, d.document);
-    if (d.text) await sender.sendText(dest.to, d.text);
-  } catch (e) {
-    const error = e instanceof WhatsAppError ? e.message : "Falha inesperada no envio.";
-    await db.outboundMessage.create({ data: { kind: d.kind, target: d.target, destination: dest.label, summary: d.summary, status: "FAILED", error, entityId: d.entityId ?? null, automatic: d.automatic ?? false, sentById: actorId } });
-    if (e instanceof WhatsAppError) throw e;
-    console.error("[whatsapp] falha inesperada:", e instanceof Error ? e.name : "desconhecido");
-    throw new WhatsAppError("Falha inesperada no envio pelo WhatsApp.");
+export type DeliveryResult = {
+  /** Destinos que receberam, separados por vírgula */
+  destinationLabel: string;
+  summary: string;
+  failed: Array<{ label: string; error: string }>;
+};
+
+/**
+ * Envia para cada destino e registra cada tentativa. Se um grupo falhar, os outros recebem
+ * normalmente; só gera erro quando nenhum destino recebeu.
+ */
+export async function deliver(db: Db, actorId: string | null, sender: WhatsAppSender, d: Delivery): Promise<DeliveryResult> {
+  const sent: string[] = [];
+  const failed: DeliveryResult["failed"] = [];
+  let firstError: WhatsAppError | null = null;
+  for (const dest of await destinations(db, d.target)) {
+    const base = { kind: d.kind, target: d.target, destination: dest.label, summary: d.summary, entityId: d.entityId ?? null, automatic: d.automatic ?? false, sentById: actorId };
+    try {
+      if (d.document) await sender.sendDocument(dest.to, d.document);
+      if (d.text) await sender.sendText(dest.to, d.text);
+    } catch (e) {
+      if (!(e instanceof WhatsAppError)) console.error("[whatsapp] falha inesperada:", e instanceof Error ? e.name : "desconhecido");
+      const err = e instanceof WhatsAppError ? e : new WhatsAppError("Falha inesperada no envio pelo WhatsApp.");
+      firstError ??= err;
+      await db.outboundMessage.create({ data: { ...base, status: "FAILED", error: err.message } });
+      failed.push({ label: dest.label, error: err.message });
+      continue;
+    }
+    const msg = await db.outboundMessage.create({ data: { ...base, status: "SENT" } });
+    await audit(db, { actorId, action: "SEND_WHATSAPP", entityType: "OutboundMessage", entityId: msg.id, summary: `${MESSAGE_KINDS[d.kind]} enviado para ${dest.label}: ${d.summary}` });
+    sent.push(dest.label);
   }
-  const msg = await db.outboundMessage.create({ data: { kind: d.kind, target: d.target, destination: dest.label, summary: d.summary, status: "SENT", entityId: d.entityId ?? null, automatic: d.automatic ?? false, sentById: actorId } });
-  await audit(db, { actorId, action: "SEND_WHATSAPP", entityType: "OutboundMessage", entityId: msg.id, summary: `${MESSAGE_KINDS[d.kind]} enviado para ${dest.label}: ${d.summary}` });
-  return { ...msg, destinationLabel: dest.label };
+  if (!sent.length && firstError) throw firstError;
+  return { destinationLabel: sent.join(", "), summary: d.summary, failed };
+}
+
+/** Texto curto do resultado para a tela (inclui falhas parciais). */
+export function deliveryMessage(prefix: string, r: DeliveryResult) {
+  const fails = r.failed.map((f) => `${f.label} (${f.error})`).join("; ");
+  return `${prefix} ${r.destinationLabel}.${fails ? ` Não foi entregue em: ${fails}` : ""}`;
 }
 
 // ───────────── Modelos de mensagem ─────────────
@@ -265,7 +308,7 @@ export async function sendMeetingCancellationToGroup(db: Db, actor: Actor, meeti
  */
 export async function runAutomaticReminders(db: Db, sender: WhatsAppSender, now: Date = new Date()) {
   const s = await getNotificationSettings(db);
-  if (!s.reminderEnabled || !s.groupJid) return { sent: 0, failed: 0, skipped: "desativado" as const };
+  if (!s.reminderEnabled || !s.groupJids.length) return { sent: 0, failed: 0, skipped: "desativado" as const };
   const tz = timeZone();
   const today = todayInTimeZone(tz, now);
   const candidates = await db.meeting.findMany({

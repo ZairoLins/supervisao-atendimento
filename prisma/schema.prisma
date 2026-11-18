@@ -50,6 +50,8 @@ model Session {
   createdAt  DateTime @default(now())
   lastSeenAt DateTime @default(now())
   userAgent  String?
+  // "Manter conectado": validade longa e cookie persistente
+  remember   Boolean  @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -563,9 +565,9 @@ model NotificationSettings {
   managerName         String?
   // Número no formato internacional, só dígitos (ex.: 5511999998888)
   managerPhone        String?
-  groupName           String?
-  // JID do grupo (ex.: 120363000000000000@g.us)
-  groupJid            String?
+  // Grupos que recebem os avisos: JIDs (ex.: 120363000000000000@g.us) e nomes, na mesma ordem
+  groupJids           String[] @default([])
+  groupNames          String[] @default([])
   reminderEnabled     Boolean  @default(false)
   reminderHoursBefore Int      @default(2)
   updatedById         String?  @db.Uuid

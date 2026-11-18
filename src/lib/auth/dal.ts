@@ -5,28 +5,46 @@ import { forbidden, redirect } from "next/navigation";
 import { db } from "../db";
 import { cookieSecure, env } from "../env";
 import { makeActor, can, type Actor, type Permission } from "../permissions";
-import { createSession, invalidateSession, validateSessionToken } from "./sessions";
+import { createSession, invalidateSession, REMEMBER_TTL_HOURS, validateSessionToken } from "./sessions";
 
 export const SESSION_COOKIE = "sv_session";
+/** Último usuário que entrou neste navegador (só o login, nunca a senha). */
+export const LAST_USER_COOKIE = "sv_usuario";
 
 /**
- * Cookie de sessão do navegador (sem data de expiração): some ao fechar o navegador.
- * A validade real (deslizante) é controlada no banco.
+ * Cookie da sessão. Sem "manter conectado" é um cookie de navegador (some ao fechar o
+ * navegador); com a opção, dura 30 dias. A validade real (deslizante) é controlada no banco.
  */
-async function setSessionCookie(token: string) {
+async function setSessionCookie(token: string, remember: boolean) {
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
     secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
+    ...(remember ? { maxAge: REMEMBER_TTL_HOURS * 3600 } : {}),
   });
 }
 
-export async function startSession(userId: string): Promise<void> {
+export async function startSession(userId: string, remember = false): Promise<void> {
   const ua = (await headers()).get("user-agent");
-  const { token } = await createSession(db, userId, env().SESSION_TTL_HOURS, ua);
-  await setSessionCookie(token);
+  const { token } = await createSession(db, userId, env().SESSION_TTL_HOURS, ua, remember);
+  await setSessionCookie(token, remember);
+}
+
+/** Guarda (ou esquece) o usuário para preencher o login na próxima vez. */
+export async function rememberUsername(username: string | null): Promise<void> {
+  const store = await cookies();
+  if (!username) {
+    store.delete(LAST_USER_COOKIE);
+    return;
+  }
+  store.set(LAST_USER_COOKIE, username, { httpOnly: true, secure: cookieSecure(), sameSite: "lax", path: "/", maxAge: 365 * 24 * 3600 });
+}
+
+export async function rememberedUsername(): Promise<string | null> {
+  const value = (await cookies()).get(LAST_USER_COOKIE)?.value ?? "";
+  return /^[a-z0-9._-]{1,60}$/.test(value) ? value : null;
 }
 
 export async function endSession(): Promise<void> {

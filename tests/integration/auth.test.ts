@@ -113,6 +113,19 @@ describe.skipIf(!hasTestDb)("autenticação e sessões (banco)", () => {
     expect(r?.renewedExpiresAt).not.toBeNull();
   });
 
+  it("manter conectado: sessão de 30 dias, renovada com o uso", async () => {
+    const actor = await createUser();
+    const { token, expiresAt } = await createSession(testDb(), actor.id, 12, null, true);
+    expect(expiresAt.getTime() - Date.now()).toBeGreaterThan(29 * 24 * 3_600_000);
+    // Depois de 3 dias (passaria das 12 h normais) continua válida
+    expect(await validateSessionToken(testDb(), token, 12, new Date(Date.now() + 3 * 24 * 3_600_000))).not.toBeNull();
+    // Depois de 20 dias, renova por mais 30
+    const r = await validateSessionToken(testDb(), token, 12, new Date(Date.now() + 20 * 24 * 3_600_000));
+    expect(r?.renewedExpiresAt).not.toBeNull();
+    const normal = await createSession(testDb(), actor.id, 12);
+    expect(await validateSessionToken(testDb(), normal.token, 12, new Date(Date.now() + 13 * 3_600_000))).toBeNull();
+  });
+
   it("troca de senha exige a senha atual e encerra outras sessões", async () => {
     const actor = await createUser();
     const s1 = await createSession(testDb(), actor.id, 12);

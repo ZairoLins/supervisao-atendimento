@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getCurrentActor } from "@/lib/auth/dal";
+import { getCurrentActor, rememberedUsername } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { ActionForm, FormMessage, SubmitButton, TextField } from "@/components/ui/form";
+import { ActionForm, CheckboxField, FormMessage, SubmitButton, TextField } from "@/components/ui/form";
 import { loginAction } from "./actions";
 
 export const metadata: Metadata = { title: "Entrar" };
@@ -12,6 +12,7 @@ const MODULES = ["Frequência e escalas", "Desempenho semanal", "Reuniões e pau
 export default async function LoginPage() {
   if (await getCurrentActor()) redirect("/");
   const hasUsers = (await db.user.count()) > 0;
+  const lastUser = await rememberedUsername();
 
   return (
     <main className="grid min-h-dvh grid-cols-1 bg-canvas lg:grid-cols-[1.15fr_1fr]">
@@ -52,8 +53,12 @@ export default async function LoginPage() {
           <p className="mt-3 mb-9 text-[14.5px] text-muted">Use o usuário e a senha fornecidos pela supervisão.</p>
           {hasUsers ? (
             <ActionForm action={loginAction} className="flex flex-col gap-5">
-              <TextField name="username" label="Usuário" autoComplete="username" required />
+              <TextField name="username" label="Usuário" autoComplete="username" required defaultValue={lastUser} />
               <TextField name="password" label="Senha" type="password" autoComplete="current-password" required />
+              <div className="flex flex-col gap-2.5">
+                <CheckboxField name="rememberUser" label="Lembrar meu usuário neste computador" defaultChecked />
+                <CheckboxField name="remember" label="Manter conectado por 30 dias" />
+              </div>
               <FormMessage />
               <SubmitButton className="mt-1 w-full min-h-11">Entrar</SubmitButton>
             </ActionForm>

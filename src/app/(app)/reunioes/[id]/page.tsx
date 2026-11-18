@@ -68,7 +68,8 @@ export default async function MeetingPage(props: PageProps<"/reunioes/[id]">) {
       {m.status === "CANCELED" ? (
         <div className="mb-6 flex flex-col gap-3">
           <Notice tone="warn">Reunião cancelada{m.cancelReason ? ` — motivo: ${m.cancelReason}` : "."}</Notice>
-          {params.aviso === "enviado" ? <Notice tone="ok">Aviso de cancelamento enviado ao grupo.</Notice> : null}
+          {params.aviso === "enviado" ? <Notice tone="ok">Aviso de cancelamento enviado aos grupos.</Notice> : null}
+          {params.aviso === "parcial" ? <Notice tone="warn">O aviso de cancelamento não chegou em todos os grupos. Veja o histórico abaixo e use “Reenviar aviso de cancelamento”.</Notice> : null}
           {params.aviso === "falhou" ? (
             <Notice tone="danger">
               O aviso ao grupo não foi enviado

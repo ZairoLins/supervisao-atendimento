@@ -13,6 +13,8 @@ export function hashSessionToken(token: string): string {
 
 const HOUR_MS = 3_600_000;
 const TOUCH_INTERVAL_MS = 5 * 60_000;
+/** "Manter conectado": validade (deslizante) de 30 dias. */
+export const REMEMBER_TTL_HOURS = 24 * 30;
 
 export type SessionUser = { id: string; name: string; username: string; role: "SUPERVISOR" | "ASSISTANT" };
 
@@ -21,11 +23,12 @@ export async function createSession(
   userId: string,
   ttlHours: number,
   userAgent?: string | null,
+  remember = false,
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = generateSessionToken();
-  const expiresAt = new Date(Date.now() + ttlHours * HOUR_MS);
+  const expiresAt = new Date(Date.now() + (remember ? REMEMBER_TTL_HOURS : ttlHours) * HOUR_MS);
   await db.session.create({
-    data: { id: hashSessionToken(token), userId, expiresAt, userAgent: userAgent?.slice(0, 300) ?? null },
+    data: { id: hashSessionToken(token), userId, expiresAt, remember, userAgent: userAgent?.slice(0, 300) ?? null },
   });
   return { token, expiresAt };
 }
@@ -52,7 +55,7 @@ export async function validateSessionToken(
     return null;
   }
   let renewedExpiresAt: Date | null = null;
-  const ttlMs = ttlHours * HOUR_MS;
+  const ttlMs = (session.remember ? REMEMBER_TTL_HOURS : ttlHours) * HOUR_MS;
   const data: { expiresAt?: Date; lastSeenAt?: Date } = {};
   if (session.expiresAt.getTime() - now.getTime() < ttlMs / 2) {
     renewedExpiresAt = new Date(now.getTime() + ttlMs);

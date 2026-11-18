@@ -8,7 +8,7 @@ import { today } from "@/lib/page";
 import { addMonths, formatDateTime, monthKey, startOfMonth, toDateKey } from "@/lib/dates";
 import { pageParam, readParams } from "@/lib/validation";
 import { evolutionConfigFromEnv, evolutionSender, fetchQrCode } from "@/modules/whatsapp/client";
-import { getNotificationSettings, listMessages, maskPhone, MESSAGE_KINDS, type MessageKind } from "@/modules/whatsapp/service";
+import { getNotificationSettings, listMessages, maskPhone, MAX_GROUPS, MESSAGE_KINDS, type MessageKind } from "@/modules/whatsapp/service";
 import { payrollLabel, payrollPeriod, previousPayrollPeriod } from "@/modules/reports/occurrences-report";
 import {
   saveNotificationSettingsAction,
@@ -55,7 +55,7 @@ export default async function WhatsAppPage(props: PageProps<"/whatsapp">) {
       <PageHeader
         eyebrow="Envios"
         title="WhatsApp"
-        description="Envie ao gestor as ocorrências da folha, as pautas e o relatório mensal, e avise o grupo do Suporte Interno sobre a reunião semanal. Pautas e avisos também podem ser enviados pela página de cada reunião."
+        description="Envie ao gestor as ocorrências da folha, as pautas e o relatório mensal, e avise os grupos sobre a reunião semanal. Pautas e avisos também podem ser enviados pela página de cada reunião."
         actions={
           <Link href="/whatsapp/mensagens" className="btn btn-secondary">
             <MessageSquareText className="size-3.5" aria-hidden /> Modelos de mensagem
@@ -166,7 +166,7 @@ export default async function WhatsAppPage(props: PageProps<"/whatsapp">) {
                   {(["MANAGER", "GROUP"] as const).map((target) => (
                     <ActionForm key={target} action={sendTestAction} className="flex flex-col gap-2">
                       <Hidden name="target" value={target} />
-                      <SubmitButton variant="secondary" className="btn-sm"><Smartphone className="size-3.5" aria-hidden /> Testar {target === "MANAGER" ? "gestor" : "grupo"}</SubmitButton>
+                      <SubmitButton variant="secondary" className="btn-sm"><Smartphone className="size-3.5" aria-hidden /> Testar {target === "MANAGER" ? "gestor" : "grupos"}</SubmitButton>
                       <FormMessage />
                     </ActionForm>
                   ))}
@@ -179,9 +179,9 @@ export default async function WhatsAppPage(props: PageProps<"/whatsapp">) {
             <ActionForm action={saveNotificationSettingsAction} className="flex flex-col gap-5">
               <TextField name="managerName" label="Nome do gestor" defaultValue={settings.managerName} maxLength={120} />
               <TextField name="managerPhone" label="WhatsApp do gestor" defaultValue={settings.managerPhone} placeholder="(11) 99999-8888" inputMode="numeric" maxLength={30} hint="Com DDD. Números sem código do país recebem +55." />
-              <GroupPicker groups={conn.configured ? conn.groups : []} defaultJid={settings.groupJid} defaultName={settings.groupName} />
+              <GroupPicker groups={conn.configured ? conn.groups : []} selected={settings.groupJids.map((jid, i) => ({ jid, name: settings.groupNames[i] || "Grupo" }))} max={MAX_GROUPS} connected={ready} />
               <div className="rounded-xl border border-line p-4">
-                <CheckboxField name="reminderEnabled" label="Avisar o grupo automaticamente antes da reunião semanal" defaultChecked={settings.reminderEnabled} />
+                <CheckboxField name="reminderEnabled" label="Avisar os grupos automaticamente antes da reunião semanal" defaultChecked={settings.reminderEnabled} />
                 <div className="mt-4 max-w-48">
                   <TextField name="reminderHoursBefore" label="Antecedência (horas)" type="number" min={0} max={72} required defaultValue={settings.reminderHoursBefore} />
                 </div>

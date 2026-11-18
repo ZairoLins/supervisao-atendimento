@@ -1,12 +1,13 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { isAppError } from "@/lib/errors";
 import { authenticate, hashIp } from "@/lib/auth/login";
-import { endSession, getClientIp, startSession } from "@/lib/auth/dal";
+import { endSession, getClientIp, rememberUsername, startSession } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/action";
 
 const schema = z.object({
@@ -25,7 +26,8 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
   try {
     const ipHash = hashIp(await getClientIp(), env().SESSION_SECRET);
     const user = await authenticate(db, { ...parsed.data, ipHash });
-    await startSession(user.id);
+    await startSession(user.id, formData.get("remember") === "on");
+    await rememberUsername(formData.get("rememberUser") === "on" ? user.username : null);
   } catch (e) {
     if (isAppError(e)) return { ok: false, message: e.message, values, nonce: Date.now() };
     console.error("[login] erro inesperado", e instanceof Error ? e.name : "");
@@ -36,5 +38,7 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
 
 export async function logoutAction(): Promise<void> {
   await endSession();
+  // A tela de login mostra o usuário lembrado: não reaproveitar a versão em cache
+  revalidatePath("/login");
   redirect("/login");
 }

@@ -2,12 +2,15 @@
 
 import { db } from "@/lib/db";
 import { formToObject, runAction, type ActionState } from "@/lib/action";
+import { getCurrentActor } from "@/lib/auth/dal";
 import { isValidDateKey, parseDateKey } from "@/lib/dates";
 import { AppError, ValidationError } from "@/lib/errors";
+import { can } from "@/lib/permissions";
 import { isUuid } from "@/lib/page";
 import { cancelMeeting } from "@/modules/meetings/service";
-import { defaultSender } from "./client";
+import { defaultSender, evolutionConfigFromEnv, evolutionSender, WhatsAppError } from "./client";
 import {
+  deliveryMessage,
   resetTemplate,
   saveNotificationSettings,
   saveTemplate,
@@ -23,7 +26,7 @@ const PAGE = "/whatsapp";
 
 export async function saveNotificationSettingsAction(_: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
-    await saveNotificationSettings(db, actor, formToObject(fd));
+    await saveNotificationSettings(db, actor, formToObject(fd, ["groups"]));
     return { message: "Destinatários salvos.", revalidate: [PAGE] };
   });
 }
@@ -32,7 +35,7 @@ export async function sendTestAction(_: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
     const target = fd.get("target") === "GROUP" ? "GROUP" : "MANAGER";
     const r = await sendTestMessage(db, actor, target, defaultSender());
-    return { message: `Mensagem de teste enviada para ${r.destinationLabel}.`, revalidate: [PAGE] };
+    return { message: deliveryMessage("Mensagem de teste enviada para", r), revalidate: [PAGE] };
   });
 }
 
@@ -64,7 +67,7 @@ export async function sendMeetingAgendaAction(meetingId: string, _: ActionState,
 export async function sendMeetingReminderAction(meetingId: string, _: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
     const r = await sendMeetingReminderToGroup(db, actor, checkId(meetingId), defaultSender());
-    return { message: `Aviso enviado para ${r.destinationLabel}.`, revalidate: [`/reunioes/${meetingId}`, PAGE] };
+    return { message: deliveryMessage("Aviso enviado para", r), revalidate: [`/reunioes/${meetingId}`, PAGE] };
   });
 }
 
@@ -77,8 +80,8 @@ export async function cancelMeetingAction(meetingId: string, _: ActionState, fd:
     // O formulário some após o cancelamento: o resultado do aviso vai para o topo da página
     if (fd.get("notify") !== "on") return { redirectTo: `/reunioes/${id}?cancelada=1`, revalidate };
     try {
-      await sendMeetingCancellationToGroup(db, actor, id, defaultSender());
-      return { redirectTo: `/reunioes/${id}?cancelada=1&aviso=enviado`, revalidate };
+      const r = await sendMeetingCancellationToGroup(db, actor, id, defaultSender());
+      return { redirectTo: `/reunioes/${id}?cancelada=1&aviso=${r.failed.length ? "parcial" : "enviado"}`, revalidate };
     } catch (e) {
       if (!(e instanceof AppError)) console.error("[whatsapp] falha no aviso de cancelamento:", e instanceof Error ? e.name : "desconhecido");
       return { redirectTo: `/reunioes/${id}?cancelada=1&aviso=falhou`, revalidate };
@@ -89,7 +92,7 @@ export async function cancelMeetingAction(meetingId: string, _: ActionState, fd:
 export async function sendCancellationAction(meetingId: string, _: ActionState, fd: FormData) {
   return runAction(fd, async (actor) => {
     const r = await sendMeetingCancellationToGroup(db, actor, checkId(meetingId), defaultSender());
-    return { message: `Aviso de cancelamento enviado para ${r.destinationLabel}.`, revalidate: [`/reunioes/${meetingId}`, PAGE] };
+    return { message: deliveryMessage("Aviso de cancelamento enviado para", r), revalidate: [`/reunioes/${meetingId}`, PAGE] };
   });
 }
 
@@ -105,6 +108,21 @@ export async function resetTemplateAction(key: string, _: ActionState, fd: FormD
     await resetTemplate(db, actor, key);
     return { message: "Modelo restaurado para o padrão.", revalidate: [`${PAGE}/mensagens`] };
   });
+}
+
+/** Busca de novo os grupos do número conectado (botão "Atualizar lista"). */
+export async function refreshGroupsAction(): Promise<{ ok: true; groups: Array<{ id: string; subject: string; size: number | null }> } | { ok: false; message: string }> {
+  const actor = await getCurrentActor();
+  if (!actor || !can(actor, "messages:send")) return { ok: false, message: "Sem permissão." };
+  const cfg = evolutionConfigFromEnv();
+  if (!cfg) return { ok: false, message: "O WhatsApp ainda não foi configurado no servidor." };
+  try {
+    const sender = evolutionSender({ ...cfg, timeoutMs: 45_000 });
+    if ((await sender.connectionState()) !== "open") return { ok: false, message: "O WhatsApp não está conectado. Leia o QR Code primeiro." };
+    return { ok: true, groups: await sender.fetchGroups() };
+  } catch (e) {
+    return { ok: false, message: e instanceof WhatsAppError ? e.message : "Não foi possível buscar os grupos." };
+  }
 }
 
 function checkId(id: string) {
