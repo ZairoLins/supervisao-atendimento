@@ -27,7 +27,7 @@ export default async function LoginPage() {
       <div aria-hidden className="dot-grid pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
 
       <header className="flex items-center gap-2.5 px-5 py-5 sm:px-8">
-        <LogoMark />
+        <LogoMark className="size-9" />
         <span className="text-[15px] font-semibold tracking-[-0.01em]">Supervisão</span>
         <span className="text-[13px] text-subtle">· Atendimento</span>
       </header>

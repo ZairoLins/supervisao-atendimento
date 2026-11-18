@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { CommandPalette } from "@/components/search/command-palette";
+import { IdxMark } from "@/components/brand/idx-logo";
 
 export type NavKey = "dashboard" | "kanban" | "employees" | "meetings" | "attendance" | "metrics" | "feedbacks" | "reports" | "whatsapp" | "settings";
 
@@ -62,22 +63,15 @@ function initials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-/** Marca: círculo com o gradiente cônico (uso exclusivo do logo) + nome. */
-export function LogoMark({ className = "size-6" }: { className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={`${className} inline-block shrink-0 rounded-full [background:conic-gradient(from_-81deg,#ff0000,#eab308_99deg,#5cff80_162deg,#00fff9_216deg,#3a8bfd_288deg,#855afc)] p-[3px]`}
-    >
-      <span className="block size-full rounded-full bg-white" />
-    </span>
-  );
+/** Marca IDX (fundo preto arredondado). */
+export function LogoMark({ className = "size-8" }: { className?: string }) {
+  return <IdxMark className={`${className} shrink-0`} />;
 }
 
 function Wordmark() {
   return (
     <Link href="/" className="flex items-center gap-2.5 px-2">
-      <LogoMark />
+      <LogoMark className="size-9" />
       <span className="leading-tight">
         <span className="block text-[15px] font-semibold tracking-[-0.01em]">Supervisão</span>
         <span className="block text-[11.5px] text-subtle">Atendimento</span>
@@ -186,7 +180,7 @@ export function AppShell({
             <Menu className="size-5" strokeWidth={1.75} aria-hidden />
           </button>
           <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold lg:hidden">
-            <LogoMark className="size-5" /> Supervisão
+            <LogoMark className="size-7" /> Supervisão
           </Link>
           <div className="ml-auto flex w-full max-w-md justify-end lg:ml-0 lg:max-w-lg lg:justify-start">
             <CommandPalette />
