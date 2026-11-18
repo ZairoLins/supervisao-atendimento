@@ -25,7 +25,7 @@ export default async function LoginPage() {
     <main className="grid min-h-dvh grid-cols-1 bg-canvas lg:grid-cols-[1fr_1.05fr]">
       {/* Foto da sede (public/login-predio.jpg). Sem o arquivo, fica o fundo escuro com textura. */}
       <aside className="hidden p-3 lg:block">
-        <div className="relative h-full overflow-hidden rounded-2xl bg-[#0b1530] bg-cover bg-center" style={{ backgroundImage: "url('/login-predio.jpg')" }}>
+        <div className="relative h-full overflow-hidden rounded-2xl bg-[#0b1530] bg-cover bg-[position:65%_45%]" style={{ backgroundImage: "url('/login-predio.jpg')" }}>
           <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 p-8 text-white">
             <p className="text-[13px] font-medium text-white/70">IDX Data Centers &amp; IT Services</p>
