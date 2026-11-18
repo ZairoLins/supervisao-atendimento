@@ -62,11 +62,26 @@ function initials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
+/** Marca: círculo com o gradiente cônico (uso exclusivo do logo) + nome. */
+export function LogoMark({ className = "size-6" }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={`${className} inline-block shrink-0 rounded-full [background:conic-gradient(from_-81deg,#ff0000,#eab308_99deg,#5cff80_162deg,#00fff9_216deg,#3a8bfd_288deg,#855afc)] p-[3px]`}
+    >
+      <span className="block size-full rounded-full bg-white" />
+    </span>
+  );
+}
+
 function Wordmark() {
   return (
-    <Link href="/" className="group flex items-baseline gap-2 px-3">
-      <span className="font-serif text-[26px] leading-none tracking-[-0.01em]">Supervisão</span>
-      <span aria-hidden className="size-1.5 translate-y-[-2px] rounded-full bg-primary transition-transform group-hover:scale-125" />
+    <Link href="/" className="flex items-center gap-2.5 px-2">
+      <LogoMark />
+      <span className="leading-tight">
+        <span className="block text-[15px] font-semibold tracking-[-0.01em]">Supervisão</span>
+        <span className="block text-[11.5px] text-subtle">Atendimento</span>
+      </span>
     </Link>
   );
 }
@@ -78,12 +93,11 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
-      className={`group relative flex items-center gap-3 rounded-[8px] px-3 py-2 text-[14px] transition-colors ${
-        active ? "bg-surface font-medium text-ink ring-1 ring-line" : "text-muted hover:bg-surface-2/70 hover:text-ink"
+      className={`group flex items-center gap-2.5 rounded-[8px] px-2 py-[7px] text-[13.5px] transition-colors ${
+        active ? "bg-primary-soft font-medium text-ink" : "text-muted hover:bg-black/[0.04] hover:text-ink"
       }`}
     >
-      {active ? <span aria-hidden className="absolute top-2 bottom-2 -left-[13px] w-[3px] rounded-r bg-primary" /> : null}
-      <Icon className={`size-4 shrink-0 ${active ? "text-ink" : "text-subtle group-hover:text-ink"}`} strokeWidth={1.75} aria-hidden />
+      <Icon className={`size-4 shrink-0 ${active ? "text-primary" : "text-subtle group-hover:text-ink"}`} strokeWidth={1.75} aria-hidden />
       <span className="truncate">{item.label}</span>
     </Link>
   );
@@ -118,13 +132,12 @@ export function AppShell({
   const sections = SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => allowed.includes(i.key)) })).filter((s) => s.items.length);
 
   const sidebar = (
-    <div className="flex h-full flex-col border-r border-line bg-canvas px-3 pt-6 pb-4">
+    <div className="flex h-full flex-col border-r border-line bg-[#fafafa] px-3 pt-5 pb-3">
       <Wordmark />
-      <p className="eyebrow mt-1.5 px-3">Atendimento</p>
-      <nav aria-label="Navegação principal" className="mt-8 flex flex-1 flex-col gap-6 overflow-y-auto">
+      <nav aria-label="Navegação principal" className="mt-7 flex flex-1 flex-col gap-5 overflow-y-auto">
         {sections.map((s) => (
           <div key={s.title}>
-            <p className="eyebrow mb-2 px-3 text-[10px]">{s.title}</p>
+            <p className="mb-1 px-2 text-[11.5px] font-medium text-subtle">{s.title}</p>
             <div className="flex flex-col gap-0.5">
               {s.items.map((item) => (
                 <NavLink key={item.key} item={item} pathname={pathname} />
@@ -133,16 +146,16 @@ export function AppShell({
           </div>
         ))}
       </nav>
-      <div className="mt-4 flex flex-col gap-0.5 border-t border-line pt-4">
+      <div className="mt-4 flex flex-col gap-0.5">
         {allowed.includes("settings") ? <NavLink item={SETTINGS} pathname={pathname} /> : null}
-        <div className="mt-2 flex items-center gap-3 px-3 py-1.5">
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-ink font-mono text-[11px] font-medium text-white">{initials(user.name)}</span>
+        <div className="mt-2 flex items-center gap-2.5 rounded-[8px] border border-line bg-surface px-2 py-2">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary-soft text-[11px] font-semibold text-primary-ink">{initials(user.name)}</span>
           <span className="min-w-0 flex-1 leading-tight">
             <span className="block truncate text-[13.5px] font-medium">{user.name}</span>
             <span className="block text-xs text-subtle">{user.role}</span>
           </span>
           <form action={logout}>
-            <button type="submit" className="grid size-8 place-items-center rounded-md text-subtle transition-colors hover:bg-surface-2 hover:text-ink" aria-label="Sair" title="Sair">
+            <button type="submit" className="grid size-7 place-items-center rounded-md text-subtle transition-colors hover:bg-surface-2 hover:text-ink" aria-label="Sair" title="Sair">
               <LogOut className="size-4" strokeWidth={1.75} aria-hidden />
             </button>
           </form>
@@ -152,7 +165,7 @@ export function AppShell({
   );
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
+    <div className="min-h-dvh lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="sticky top-0 hidden h-dvh lg:block">{sidebar}</aside>
 
       {open ? (
@@ -168,18 +181,18 @@ export function AppShell({
       ) : null}
 
       <div className="flex min-w-0 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-canvas/85 px-4 py-2.5 backdrop-blur-md md:px-10">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-white/80 px-4 py-2.5 backdrop-blur-md md:px-8">
           <button type="button" className="btn btn-ghost btn-sm -ml-1.5 px-2 lg:hidden" onClick={() => setOpen(true)} aria-label="Abrir menu" aria-expanded={open}>
             <Menu className="size-5" strokeWidth={1.75} aria-hidden />
           </button>
-          <Link href="/" className="font-serif text-[22px] leading-none lg:hidden">
-            Supervisão
+          <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold lg:hidden">
+            <LogoMark className="size-5" /> Supervisão
           </Link>
           <div className="ml-auto flex w-full max-w-md justify-end lg:ml-0 lg:max-w-lg lg:justify-start">
             <CommandPalette />
           </div>
         </header>
-        <main id="conteudo" className="mx-auto w-full max-w-[1320px] flex-1 px-4 pt-7 pb-16 md:px-10 md:pt-10">
+        <main id="conteudo" className="mx-auto w-full max-w-[1200px] flex-1 px-4 pt-6 pb-16 md:px-8 md:pt-8">
           {children}
         </main>
       </div>

@@ -1,48 +1,58 @@
 @import "tailwindcss";
-@import "@fontsource-variable/instrument-sans";
-@import "@fontsource/instrument-serif/400.css";
-@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource-variable/inter";
 @import "@fontsource-variable/geist-mono";
 
 /*
- * Design system — "papel e tinta".
- * Fundo off-white quente, tinta quase preta, um único azul cobalto para foco, seleção e
- * destaques. Títulos em serifa, números grandes, linhas finas no lugar de sombras.
+ * Design system — branco, linhas finas e um azul elétrico.
+ * Fundo branco, contêineres definidos por bordas de 1px (#e5e5e5) em vez de sombras,
+ * tipografia monocromática densa (Inter; títulos em peso 500) e o azul #2563eb como
+ * única cor de destaque. Etiquetas em pílula com fundo suave; botão principal preto.
  * Estados sempre acompanhados de texto.
  */
 @theme {
-  --color-canvas: #f7f6f2;
+  --color-canvas: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-2: #f0eee8;
-  --color-ink: #121212;
-  --color-muted: #55534d;
-  --color-subtle: #8a877f;
-  --color-line: #e7e4dc;
-  --color-line-strong: #d2cec4;
+  --color-surface-2: #f5f5f5;
+  --color-ink: #171717;
+  --color-muted: #525252;
+  --color-subtle: #737373;
+  --color-line: #e5e5e5;
+  --color-line-strong: #d4d4d4;
 
-  --color-primary: #2a45f0;
-  --color-primary-hover: #1d36d1;
-  --color-primary-soft: #eef0ff;
-  --color-primary-ink: #1b2db0;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1e40af;
+  --color-primary-soft: #dbeaff;
+  --color-primary-ink: #1e40af;
 
-  --color-sidebar: #121212;
-  --color-sidebar-2: #1e1e1e;
+  --color-sidebar: #0a0a0a;
+  --color-sidebar-2: #171717;
 
-  --color-ok: #1d7a4c;
-  --color-ok-soft: #ebf5ef;
-  --color-warn: #9a5800;
-  --color-warn-soft: #fbf2e3;
-  --color-danger: #c3301f;
-  --color-danger-soft: #fbedeb;
-  --color-info: #2a45f0;
+  --color-ok: #16a34a;
+  --color-ok-soft: #dcfce7;
+  --color-warn: #c2410c;
+  --color-warn-soft: #ffedd5;
+  --color-danger: #dc2626;
+  --color-danger-soft: #fee2e2;
+  --color-info: #2563eb;
 
-  --font-sans: "Instrument Sans Variable", "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-serif: "Instrument Serif", ui-serif, Georgia, "Times New Roman", serif;
+  /* Acentos das etiquetas e atalhos (uma cor por item) */
+  --color-tangerine: #ea580c;
+  --color-lavender: #7c3aed;
+  --color-mint: #16a34a;
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Títulos: Inter 500 com espaçamento apertado (substituto do Satoshi) */
+  --font-display: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-display);
   --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --radius-card: 12px;
-  --spacing-gap: 20px;
-  --spacing-panel: 22px;
+  --spacing-gap: 16px;
+  --spacing-panel: 20px;
+
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-ring: 0 0 0 4px rgba(0, 0, 0, 0.06);
+  --shadow-pop: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
 }
 
 :root {
@@ -54,13 +64,13 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 14px;
+  font-feature-settings: "cv11" on, "ss01" on;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: #d9deff;
+  background: #dbeaff;
   color: var(--color-ink);
 }
 
@@ -72,33 +82,33 @@ body {
 @layer components {
   /* Tipografia */
   .display {
-    @apply font-serif text-[34px] leading-[1.05] font-normal tracking-[-0.01em] text-ink md:text-[44px];
+    @apply font-display text-[30px] leading-[1.1] font-medium tracking-[-0.02em] text-ink md:text-[36px];
   }
   .heading {
-    @apply text-lg font-semibold tracking-[-0.01em] text-ink;
+    @apply text-xl font-semibold tracking-[-0.01em] text-ink;
   }
   .subheading {
     @apply text-[15px] font-semibold tracking-[-0.005em] text-ink;
   }
   .eyebrow {
-    @apply font-mono text-[11px] font-medium tracking-[0.08em] text-subtle uppercase;
+    @apply text-[12px] font-medium text-subtle;
   }
   .label {
-    @apply mb-1.5 block text-[13px] font-medium text-ink/75;
+    @apply mb-1.5 block text-[13px] font-medium text-ink;
   }
   .accent {
     @apply text-primary;
   }
   .num {
-    @apply font-serif leading-none font-normal tracking-[-0.01em] tabular-nums;
+    @apply font-display leading-none font-medium tracking-[-0.02em] tabular-nums;
   }
 
-  /* Superfícies */
+  /* Superfícies: bordas de 1px, sem sombra */
   .panel {
     @apply rounded-[var(--radius-card)] border border-line bg-surface p-[var(--spacing-panel)];
   }
   .panel-tight {
-    @apply rounded-[var(--radius-card)] border border-line bg-surface p-5;
+    @apply rounded-[var(--radius-card)] border border-line bg-surface p-4;
   }
   .divider {
     @apply border-0 border-t border-line;
@@ -106,33 +116,33 @@ body {
 
   /* Botões */
   .btn {
-    @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-[8px] px-3.5 py-1.5 text-[13.5px] font-medium whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45;
+    @apply inline-flex min-h-9 items-center justify-center gap-2 rounded-[8px] px-3.5 py-1.5 text-[13.5px] font-medium whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply border border-ink bg-ink text-white hover:border-[#2b2b2b] hover:bg-[#2b2b2b];
+    @apply border border-black bg-black text-white shadow-[var(--shadow-subtle)] hover:bg-[#262626];
   }
   .btn-secondary {
-    @apply border border-line-strong bg-surface text-ink hover:border-ink/35;
+    @apply border border-line bg-surface text-ink shadow-[var(--shadow-subtle)] hover:border-line-strong hover:bg-surface-2;
   }
   .btn-ghost {
     @apply border border-transparent px-2.5 text-muted hover:bg-surface-2 hover:text-ink;
   }
   .btn-danger {
-    @apply border border-danger/35 bg-surface text-danger hover:border-danger hover:bg-danger-soft;
+    @apply border border-danger/30 bg-surface text-danger hover:border-danger hover:bg-danger-soft;
   }
   .btn-sm {
-    @apply min-h-8 rounded-[7px] px-2.5 py-1 text-[13px];
+    @apply min-h-8 px-2.5 py-1 text-[13px];
   }
   .link {
-    @apply font-medium text-ink underline decoration-line-strong decoration-1 underline-offset-[5px] transition-colors hover:decoration-primary;
+    @apply font-medium text-ink underline decoration-line-strong decoration-1 underline-offset-4 transition-colors hover:text-primary hover:decoration-primary;
   }
   .link-accent {
     @apply font-medium text-primary underline-offset-4 hover:underline;
   }
 
-  /* Campos */
+  /* Campos: borda escura, raio 6px */
   .input {
-    @apply block min-h-9 w-full rounded-[8px] border border-line-strong bg-surface px-3 py-1.5 text-sm text-ink transition-[border-color,box-shadow] placeholder:text-subtle focus:border-ink focus:ring-4 focus:ring-primary/12 focus:outline-none aria-invalid:border-danger aria-invalid:ring-danger/15 disabled:bg-surface-2 disabled:opacity-70;
+    @apply block min-h-9 w-full rounded-[6px] border border-[#a3a3a3] bg-surface px-3 py-1.5 text-sm text-ink transition-[border-color,box-shadow] placeholder:text-subtle hover:border-ink focus:border-ink focus:shadow-[var(--shadow-ring)] focus:outline-none aria-invalid:border-danger disabled:bg-surface-2 disabled:opacity-70;
   }
   select.input {
     @apply cursor-pointer pr-8;
@@ -141,18 +151,18 @@ body {
     @apply min-h-24 resize-y py-2;
   }
   .checkbox {
-    @apply size-4 cursor-pointer rounded-[4px] accent-[#121212];
+    @apply size-4 cursor-pointer rounded-[4px] accent-[#0a0a0a];
   }
 
-  /* Etiquetas de status: ponto + texto */
+  /* Etiquetas em pílula: fundo suave + ponto + texto */
   .badge {
-    @apply inline-flex items-center gap-1.5 rounded-full border px-2 py-px text-[12px] leading-5 font-medium whitespace-nowrap;
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] leading-5 font-medium whitespace-nowrap;
   }
   .badge-neutral {
     @apply border-line bg-surface text-muted;
   }
   .badge-ok {
-    @apply border-transparent bg-ok-soft text-ok;
+    @apply border-transparent bg-ok-soft text-[#15803d];
   }
   .badge-warn {
     @apply border-transparent bg-warn-soft text-warn;
@@ -164,7 +174,7 @@ body {
     @apply border-transparent bg-primary-soft text-primary-ink;
   }
   .badge-accent {
-    @apply border-ink bg-ink text-white;
+    @apply border-transparent bg-ink text-white;
   }
 
   /* Tabelas */
@@ -172,7 +182,7 @@ body {
     @apply w-full border-collapse text-left text-sm;
   }
   .table thead th {
-    @apply border-b border-line-strong px-3 pt-1 pb-2.5 font-mono text-[11px] font-medium tracking-[0.06em] whitespace-nowrap text-subtle uppercase;
+    @apply border-b border-line px-3 pt-1 pb-2.5 text-[12px] font-medium whitespace-nowrap text-subtle;
   }
   .table tbody td {
     @apply border-b border-line px-3 py-3 align-top;
@@ -181,18 +191,24 @@ body {
     @apply border-b-0;
   }
   .table tbody tr:hover td {
-    @apply bg-canvas;
+    @apply bg-surface-2/60;
   }
   .table-wrap {
     @apply -mx-[var(--spacing-panel)] overflow-x-auto px-[var(--spacing-panel)];
   }
 
   .kbd {
-    @apply rounded-[5px] border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-subtle;
+    @apply rounded-[5px] border border-line bg-surface px-1.5 py-0.5 font-mono text-[10px] font-medium text-subtle;
   }
 
   mark.hl {
     @apply rounded-[3px] bg-primary/15 px-0.5 text-ink;
+  }
+
+  /* Textura de pontos (fundo de áreas de destaque) */
+  .dot-grid {
+    background-image: radial-gradient(circle at 1px 1px, rgba(0, 0, 0, 0.09) 1px, transparent 0);
+    background-size: 18px 18px;
   }
 
   /* Markdown (pauta) */
@@ -237,7 +253,7 @@ body {
     @apply text-muted line-through decoration-line-strong;
   }
   .md-check {
-    @apply mr-2 inline-block size-4 align-[-3px] accent-[#2563eb];
+    @apply mr-2 inline-block size-4 align-[-3px] accent-[#0a0a0a];
   }
   .md a {
     @apply font-medium text-primary underline-offset-2 hover:underline;
@@ -268,7 +284,7 @@ body {
     @apply border-line;
   }
   .md-editor {
-    @apply overflow-hidden rounded-lg border border-line-strong shadow-sm focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20;
+    @apply overflow-hidden rounded-[6px] border border-[#a3a3a3] focus-within:border-ink focus-within:shadow-[var(--shadow-ring)];
   }
   .md-editor-error {
     @apply border-danger;

@@ -19,11 +19,11 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <header className="mb-7 flex flex-col gap-5 border-b border-line pb-6 md:mb-9 md:flex-row md:items-end md:justify-between">
+    <header className="mb-6 flex flex-col gap-4 md:mb-8 md:flex-row md:items-end md:justify-between">
       <div className="min-w-0">
-        {eyebrow ? <p className="eyebrow mb-3">{eyebrow}</p> : null}
+        {eyebrow ? <p className="eyebrow mb-2">{eyebrow}</p> : null}
         <h1 className="display break-words">{title}</h1>
-        {description ? <div className="mt-3 max-w-2xl text-[14.5px] leading-relaxed text-muted">{description}</div> : null}
+        {description ? <div className="mt-2.5 max-w-2xl text-[14px] leading-relaxed text-muted">{description}</div> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
@@ -46,7 +46,7 @@ export function Panel({
   return (
     <section className={cx("panel", className)}>
       {title || actions ? (
-        <div className="-mx-[var(--spacing-panel)] -mt-1 mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-line px-[var(--spacing-panel)] pb-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             {title ? <h2 className="subheading">{title}</h2> : null}
             {description ? <p className="mt-1 text-[13px] leading-relaxed text-subtle">{description}</p> : null}
@@ -95,9 +95,9 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2.5 rounded-[var(--radius-card)] border border-dashed border-line-strong px-6 py-12 text-center">
-      {icon ? <div className="mb-1 text-subtle">{icon}</div> : null}
-      <p className="font-serif text-[22px] leading-tight">{title}</p>
+    <div className="dot-grid flex flex-col items-center gap-2 rounded-[var(--radius-card)] border border-line bg-surface-2/40 px-6 py-10 text-center">
+      {icon ? <div className="mb-1 grid size-10 place-items-center rounded-full border border-line bg-surface text-subtle">{icon}</div> : null}
+      <p className="text-[15px] font-semibold">{title}</p>
       {description ? <p className="max-w-xl text-sm text-muted">{description}</p> : null}
       {action ? <div className="mt-1">{action}</div> : null}
     </div>
@@ -120,15 +120,15 @@ export function Stat({
   const body = (
     <>
       <p className="flex items-center justify-between gap-2">
-        <span className="eyebrow">{label}</span>
-        {href ? <ArrowUpRight className="size-3.5 text-subtle transition group-hover:text-ink" aria-hidden /> : null}
+        <span className="text-[13px] font-medium text-muted">{label}</span>
+        {href ? <ArrowUpRight className="size-3.5 text-subtle transition group-hover:text-primary" aria-hidden /> : null}
       </p>
-      <p className={cx("num mt-4 text-[40px]", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>{value}</p>
-      {hint ? <p className="mt-3 text-[12.5px] text-subtle">{hint}</p> : null}
+      <p className={cx("num mt-3 text-[28px]", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>{value}</p>
+      {hint ? <p className="mt-2 text-[12px] text-subtle">{hint}</p> : null}
     </>
   );
   return href ? (
-    <Link href={href} className="panel-tight group block transition-colors hover:border-ink/30">
+    <Link href={href} className="panel-tight group block transition-colors hover:bg-surface-2/50">
       {body}
     </Link>
   ) : (
@@ -224,9 +224,9 @@ export function SortHeader({
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "danger" | "ok"; children: ReactNode }) {
   const Icon = tone === "ok" ? CircleCheck : tone === "info" ? Info : CircleAlert;
-  const color = { info: "border-primary bg-primary-soft text-primary", warn: "border-warn bg-warn-soft text-warn", danger: "border-danger bg-danger-soft text-danger", ok: "border-ok bg-ok-soft text-ok" }[tone];
+  const color = { info: "border-primary/20 bg-primary-soft/60 text-primary", warn: "border-warn/20 bg-warn-soft/60 text-warn", danger: "border-danger/20 bg-danger-soft/60 text-danger", ok: "border-ok/20 bg-ok-soft/60 text-[#15803d]" }[tone];
   return (
-    <div role={tone === "danger" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-r-lg border-l-2 px-4 py-3 text-sm", color)}>
+    <div role={tone === "danger" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded-[var(--radius-card)] border px-4 py-3 text-sm", color)}>
       <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
       <div className="text-ink/90">{children}</div>
     </div>
@@ -235,16 +235,16 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
 
 export function Tabs({ items, active }: { items: Array<{ key: string; label: string; href: string; count?: number }>; active: string }) {
   return (
-    <nav aria-label="Seções" className="-mx-4 mb-7 overflow-x-auto px-4 md:mx-0 md:px-0">
-      <ul className="flex min-w-max gap-6 border-b border-line">
+    <nav aria-label="Seções" className="-mx-4 mb-6 overflow-x-auto px-4 md:mx-0 md:px-0">
+      <ul className="flex min-w-max gap-1">
         {items.map((t) => (
           <li key={t.key}>
             <Link
               href={t.href}
               aria-current={t.key === active ? "page" : undefined}
               className={cx(
-                "-mb-px inline-flex items-center gap-1.5 border-b-2 pt-1 pb-3 text-[14px] font-medium transition-colors",
-                t.key === active ? "border-ink text-ink" : "border-transparent text-subtle hover:text-ink",
+                "inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13.5px] font-medium transition-colors",
+                t.key === active ? "bg-surface-2 text-ink ring-1 ring-line" : "text-muted hover:bg-surface-2 hover:text-ink",
               )}
             >
               {t.label}

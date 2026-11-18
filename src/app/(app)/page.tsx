@@ -60,21 +60,19 @@ export default async function DashboardPage(props: PageProps<"/">) {
     (data.attendance?.pendingReview ?? 0) + (data.followUps?.length ?? 0) + (data.withoutSchedule?.length ?? 0) + (data.metrics?.missingLastWeek.length ?? 0);
 
   const shortcuts = [
-    can(actor, "metrics:write") && { href: "/desempenho/lancar", label: "Lançar métricas da semana", icon: LineChart },
-    can(actor, "attendance:write") && { href: "/frequencia/ocorrencias/nova", label: "Registrar ocorrência", icon: FileWarning },
-    can(actor, "employees:write") && { href: "/colaboradores/novo", label: "Novo colaborador", icon: UserPlus },
-    can(actor, "meetings:write") && { href: "/reunioes/nova", label: "Nova reunião", icon: CalendarPlus },
-  ].filter(Boolean) as Array<{ href: string; label: string; icon: typeof UserPlus }>;
+    can(actor, "metrics:write") && { href: "/desempenho/lancar", label: "Lançar métricas da semana", icon: LineChart, color: "text-lavender" },
+    can(actor, "attendance:write") && { href: "/frequencia/ocorrencias/nova", label: "Registrar ocorrência", icon: FileWarning, color: "text-tangerine" },
+    can(actor, "employees:write") && { href: "/colaboradores/novo", label: "Novo colaborador", icon: UserPlus, color: "text-mint" },
+    can(actor, "meetings:write") && { href: "/reunioes/nova", label: "Nova reunião", icon: CalendarPlus, color: "text-primary" },
+  ].filter(Boolean) as Array<{ href: string; label: string; icon: typeof UserPlus; color: string }>;
 
   return (
     <>
-      <header className="mb-8 flex flex-col gap-6 border-b border-line pb-7 xl:flex-row xl:items-end xl:justify-between">
+      <header className="mb-6 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="eyebrow mb-3">{longDate.format(t)}</p>
-          <h1 className="display">
-            Olá, <em className="text-primary">{actor.name.split(" ")[0]}</em>
-          </h1>
-          <p className="mt-3 text-[14.5px] text-muted">Resumo da equipe com base nos registros do sistema.</p>
+          <p className="eyebrow mb-2 first-letter:uppercase">{longDate.format(t)}</p>
+          <h1 className="display">Olá, {actor.name.split(" ")[0]}</h1>
+          <p className="mt-2.5 text-[14px] text-muted">Resumo da equipe com base nos registros do sistema.</p>
         </div>
         <form method="get" className="flex flex-wrap items-end gap-2.5">
           <div>
@@ -102,10 +100,9 @@ export default async function DashboardPage(props: PageProps<"/">) {
 
       {shortcuts.length ? (
         <nav aria-label="Atalhos" className="mb-6 flex flex-wrap items-center gap-2">
-          <span className="eyebrow mr-2">Atalhos</span>
           {shortcuts.map((s) => (
-            <Link key={s.href} href={s.href} className="group inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface py-1.5 pr-3.5 pl-2.5 text-[13.5px] font-medium transition-colors hover:border-ink hover:bg-ink hover:text-white">
-              <s.icon className="size-4 text-subtle transition-colors group-hover:text-white" strokeWidth={1.75} aria-hidden />
+            <Link key={s.href} href={s.href} className="inline-flex items-center gap-2 rounded-full border border-line bg-surface py-1.5 pr-3.5 pl-3 text-[13px] font-medium shadow-[var(--shadow-subtle)] transition-colors hover:border-line-strong hover:bg-surface-2">
+              <s.icon className={`size-4 ${s.color}`} strokeWidth={2} aria-hidden />
               {s.label}
             </Link>
           ))}
@@ -161,7 +158,7 @@ export default async function DashboardPage(props: PageProps<"/">) {
 
         <Panel title="Precisa de atenção" actions={attention ? <Badge tone="warn">{attention}</Badge> : undefined}>
           {attention === 0 ? (
-            <div className="flex items-center gap-3 rounded-r-lg border-l-2 border-ok bg-ok-soft p-4 text-sm text-ok">
+            <div className="flex items-center gap-3 rounded-[var(--radius-card)] border border-ok/20 bg-ok-soft/60 p-4 text-sm text-[#15803d]">
               <ClipboardList className="size-5" aria-hidden /> Nada pendente no momento.
             </div>
           ) : (
