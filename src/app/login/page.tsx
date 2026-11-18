@@ -22,14 +22,24 @@ export default async function LoginPage() {
   const lastUser = await rememberedUsername();
 
   return (
-    <main className="relative isolate flex min-h-dvh flex-col bg-canvas">
+    <main className="grid min-h-dvh grid-cols-1 bg-canvas lg:grid-cols-[1fr_1.05fr]">
+      {/* Foto da sede (public/login-predio.jpg). Sem o arquivo, fica o fundo escuro com textura. */}
+      <aside className="hidden p-3 lg:block">
+        <div className="relative h-full overflow-hidden rounded-2xl bg-[#0b1530] bg-cover bg-center" style={{ backgroundImage: "url('/login-predio.jpg')" }}>
+          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 p-8 text-white">
+            <p className="text-[13px] font-medium text-white/70">IDX Data Centers &amp; IT Services</p>
+            <p className="mt-1 text-[22px] leading-snug font-medium tracking-[-0.01em]">Supervisão de Atendimento</p>
+          </div>
+        </div>
+      </aside>
+
+      <section className="relative isolate flex min-h-dvh flex-col">
       {/* Textura de pontos, mais forte no centro */}
       <div aria-hidden className="dot-grid pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]" />
 
-      <header className="flex items-center gap-2.5 px-5 py-5 sm:px-8">
-        <LogoMark className="size-9" />
-        <span className="text-[15px] font-semibold tracking-[-0.01em]">Supervisão</span>
-        <span className="text-[13px] text-subtle">· Atendimento</span>
+      <header className="flex items-center px-5 py-5 sm:px-8">
+        <LogoMark height={44} />
       </header>
 
       <div className="flex flex-1 flex-col items-center justify-center px-5 pb-16">
@@ -41,7 +51,7 @@ export default async function LoginPage() {
             </li>
           ))}
         </ul>
-        <h1 className="mb-2 text-center font-display text-[36px] leading-[1.1] font-medium tracking-[-0.02em] sm:text-[44px]">
+        <h1 className="mb-2 text-center font-display text-[34px] leading-[1.1] font-medium tracking-[-0.02em] sm:text-[40px]">
           A rotina da equipe, <span className="text-primary">em ordem.</span>
         </h1>
         <p className="mb-8 text-center text-[15px] text-muted">Entre com o usuário e a senha fornecidos pela supervisão.</p>
@@ -68,6 +78,7 @@ export default async function LoginPage() {
         </div>
         <p className="mt-6 text-[12px] text-subtle">Acesso pela rede da empresa ou VPN</p>
       </div>
+      </section>
     </main>
   );
 }

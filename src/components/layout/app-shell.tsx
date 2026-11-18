@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -19,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { CommandPalette } from "@/components/search/command-palette";
-import { IdxMark } from "@/components/brand/idx-logo";
+
 
 export type NavKey = "dashboard" | "kanban" | "employees" | "meetings" | "attendance" | "metrics" | "feedbacks" | "reports" | "whatsapp" | "settings";
 
@@ -63,19 +64,18 @@ function initials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
-/** Marca IDX (fundo preto arredondado). */
-export function LogoMark({ className = "size-8" }: { className?: string }) {
-  return <IdxMark className={`${className} shrink-0`} />;
+/** Logo da IDX (imagem original, 131×79). A altura define o tamanho. */
+export function LogoMark({ height = 40, className }: { height?: number; className?: string }) {
+  return (
+    <Image src="/logo-idx.png" alt="IDX Data Centers & IT Services" width={Math.round((height * 131) / 79)} height={height} priority className={className} />
+  );
 }
 
 function Wordmark() {
   return (
-    <Link href="/" className="flex items-center gap-2.5 px-2">
-      <LogoMark className="size-9" />
-      <span className="leading-tight">
-        <span className="block text-[15px] font-semibold tracking-[-0.01em]">Supervisão</span>
-        <span className="block text-[11.5px] text-subtle">Atendimento</span>
-      </span>
+    <Link href="/" className="flex flex-col gap-1.5 px-2">
+      <LogoMark height={44} />
+      <span className="text-[12px] font-medium text-subtle">Supervisão de Atendimento</span>
     </Link>
   );
 }
@@ -180,7 +180,7 @@ export function AppShell({
             <Menu className="size-5" strokeWidth={1.75} aria-hidden />
           </button>
           <Link href="/" className="flex items-center gap-2 text-[15px] font-semibold lg:hidden">
-            <LogoMark className="size-7" /> Supervisão
+            <LogoMark height={30} />
           </Link>
           <div className="ml-auto flex w-full max-w-md justify-end lg:ml-0 lg:max-w-lg lg:justify-start">
             <CommandPalette />
